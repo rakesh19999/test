@@ -1,0 +1,111 @@
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import About from "../../components/About";
+import { useMsal } from "@azure/msal-react";
+import { InteractionStatus } from "@azure/msal-browser";
+import { fetchApiData } from "../../services/ApiService";
+import { BrowserRouter } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
+// Mock dependencies
+jest.mock("@azure/msal-react", () => ({
+  useMsal: jest.fn(),
+}));
+
+jest.mock("../../services/ApiService", () => ({
+  fetchApiData: jest.fn(),
+}));
+
+jest.mock("react-router-dom", () => ({
+  ...jest.requireActual("react-router-dom"),
+  useNavigate: jest.fn(),
+}));
+
+describe("About Component", () => {
+  const mockNavigate = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useNavigate as jest.Mock).mockReturnValue(mockNavigate);
+  });
+
+  test("renders About button", () => {
+    render(
+      <BrowserRouter>
+        <About />
+      </BrowserRouter>
+    );
+
+    expect(screen.getByRole("button", { name: /about/i })).toBeInTheDocument();
+  });
+
+  test("fetches and displays API data on button click", async () => {
+    // Mock API response
+    (fetchApiData as jest.Mock).mockResolvedValue({
+      dbVersion: "1.0.0",
+      moduleVersion: "2.5.1",
+    });
+
+    // Properly mock useMsal
+    (useMsal as jest.Mock).mockReturnValue({
+      instance: {
+        getActiveAccount: jest.fn(() => ({ username: "test-user" })),
+        acquireTokenSilent: jest
+          .fn()
+          .mockResolvedValue({ accessToken: "mock-token" }),
+      },
+      inProgress: InteractionStatus.None,
+    });
+
+    render(
+      <BrowserRouter>
+        <About />
+      </BrowserRouter>
+    );
+
+    // Click the button
+    fireEvent.click(screen.getByRole("button", { name: /about/i }));
+
+    // Check if loading text appears
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+
+    // Wait for API data to appear
+    await waitFor(() =>
+      expect(screen.getByText(/schema version/i)).toBeInTheDocument()
+    );
+
+    // Verify displayed API data
+    expect(screen.getByText(/schema version:/i)).toHaveTextContent("1.0.0");
+    expect(screen.getByText(/function app version:/i)).toHaveTextContent(
+      "2.5.1"
+    );
+    expect(screen.getByText(/static web app version:/i)).toHaveTextContent(
+      "v1"
+    );
+  });
+
+  test("handles login redirect if authentication is required", async () => {
+    (useMsal as jest.Mock).mockReturnValue({
+      instance: {
+        getActiveAccount: jest.fn(() => ({ username: "test-user" })),
+        acquireTokenSilent: jest
+          .fn()
+          .mockRejectedValue(new Error("InteractionRequiredAuthError")),
+      },
+      inProgress: InteractionStatus.None,
+    });
+
+    render(
+      <BrowserRouter>
+        <About />
+      </BrowserRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /about/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith("/login");
+    });
+  });
+});
