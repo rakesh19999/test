@@ -1,52 +1,72 @@
-import React, { useState } from "react";
-import { Button, Table, Container } from "react-bootstrap";
-import "./App.css";
+import React, { useState, ReactNode } from "react";
+import "./index.css";
 
-interface TableProps {
-  headers: (string | React.ReactNode)[]; // Accepts text, button, or image
-  data: Record<string, any>[]; // Table data
-}
+type ImageSeries = {
+  id: string;
+  name: string;
+};
 
-const ToggleTable: React.FC<TableProps> = ({ headers, data }) => {
-  const [showTable, setShowTable] = useState<boolean>(false);
+type ModalityData = {
+  modality: string;
+  imageSeries: ImageSeries[];
+};
+
+type CollapsibleMenuProps = {
+  data: ModalityData[];
+  columns?: number;
+  width?: string;
+  renderItem?: (item: ImageSeries) => ReactNode;
+  openIcon?: ReactNode;
+  closeIcon?: ReactNode;
+};
+
+const CollapsibleMenu: React.FC<CollapsibleMenuProps> = ({
+  data,
+  columns = 1,
+  width = "250px",
+  renderItem,
+  openIcon = "-",
+  closeIcon = "+",
+}) => {
+  const [openItems, setOpenItems] = useState<string[]>([]);
+
+  const toggleItem = (modality: string) => {
+    setOpenItems((prev) =>
+      prev.includes(modality)
+        ? prev.filter((item) => item !== modality)
+        : [...prev, modality]
+    );
+  };
 
   return (
-    <Container className="mt-3">
-      {data.length === 0 ? (
-        <p>No data available</p>
-      ) : (
-        <Table striped bordered hover className="toggle-table">
-          <thead>
-            <tr>
-              <th className="button-column">
-                <Button
-                  onClick={() => setShowTable(!showTable)}
-                  variant="primary"
-                >
-                  {showTable ? "-" : "+"}
-                </Button>
-              </th>
-              {headers.map((header, index) => (
-                <th key={index}>{header}</th>
-              ))}
-            </tr>
-          </thead>
-          {showTable && (
-            <tbody>
-              {data.map((row, rowIndex) => (
-                <tr key={rowIndex} className="data-row">
-                  <td>&nbsp;</td>
-                  {Object.values(row).map((value, colIndex) => (
-                    <td key={colIndex}>{value}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          )}
-        </Table>
-      )}
-    </Container>
+    <div className="collapsible-menu-container" style={{ width }}>
+      {data.map((modalityData) => {
+        const isOpen = openItems.includes(modalityData.modality);
+        return (
+          <div key={modalityData.modality} className="collapsible-item">
+            <div
+              className="menu-header"
+              onClick={() => toggleItem(modalityData.modality)}
+            >
+              <span className="toggle-icon">
+                {isOpen ? openIcon : closeIcon}
+              </span>
+              <span>{modalityData.modality}</span>
+            </div>
+            {isOpen && (
+              <div className="menu-content" style={{ columnCount: columns }}>
+                {modalityData.imageSeries.map((item) => (
+                  <div key={item.id} className="menu-item">
+                    {renderItem ? renderItem(item) : item.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
-export default ToggleTable;
+export default CollapsibleMenu;
