@@ -1,0 +1,105 @@
+public async Task<List<QCTaskDto>> GetImageQCTask(string taskId)
+{
+    // Fetch Study Identifier dynamically
+    var studyIdentifier = await (from studies in _dataQCDbContext.Studies
+                                 join imageStudyQcTasks in _dataQCDbContext.ImageStudyQcTasks 
+                                     on studies.Id equals imageStudyQcTasks.Study
+                                 where imageStudyQcTasks.Identifier == taskId
+                                 select studies.Identifier)
+                                .FirstOrDefaultAsync();
+
+    if (studyIdentifier == null)
+    {
+        throw new NotFoundException($"No study found for task ID {taskId}");
+    }
+
+    // Query for Image Series using dynamic study identifier
+    var queryForImageSeries = from ingSeries in _dataQCDbContext.ImageSeries
+                              join dis in _dataQCDbContext.DefinedImageSeries on ingSeries.DefinedImageSeries equals dis.Id
+                              join dm in _dataQCDbContext.DefinedModalities on dis.DefinedModality equals dm.Id
+                              join imgpro in _dataQCDbContext.ImageProtocols on dis.Protocol equals imgpro.Id
+                              join st in _dataQCDbContext.Studies on imgpro.Study equals st.Id
+                              where st.Identifier == studyIdentifier
+                              select new 
+                              {
+                                  DefinedImageSeriesId = dis.Id,
+                                  DefinedModality = dm.Name,
+                                  DefinedImageSeries = ingSeries.Name,
+                                  DefinedModalityId = dm.Id
+                              };
+
+    var queryResImageSeries = await queryForImageSeries.ToListAsync();
+
+    // Query for Modalities and Image Series using dynamic study identifier
+    var definedModalitiesAndSeriesQuery = from dis in _dataQCDbContext.DefinedImageSeries
+                                          join dm in _dataQCDbContext.DefinedModalities on dis.DefinedModality equals dm.Id
+                                          join imgpro in _dataQCDbContext.ImageProtocols on dis.Protocol equals imgpro.Id
+                                          join st in _dataQCDbContext.Studies on imgpro.Study equals st.Id
+                                          where st.Identifier == studyIdentifier
+                                          select new
+                                          {
+                                              DefinedModalityId = dm.Id,
+                                              DefinedModalities = dm.Name,
+                                              DefinedImageSeries = dis.Name,
+                                              DefinedImageSeriesId = dis.Id
+                                          };
+
+    var queryResDIS = await definedModalitiesAndSeriesQuery.ToListAsync();
+
+    // Query for Assigned Series Mapping
+    var assignedSeriesQuery = from assigned in _dataQCDbContext.AssignedSeries
+                              select new 
+                              {
+                                  Id = assigned.Id,
+                                  Name = assigned.Name
+                              };
+
+    var assignedSeriesResult = await assignedSeriesQuery.ToListAsync();
+
+    // Main QC Task Query with Assigned Series Mapping
+    var query = from studies in _dataQCDbContext.Studies
+                join sponsor in _dataQCDbContext.Sponsors on studies.Sponsor.ToString() equals sponsor.Id.ToString()
+                join sites in _dataQCDbContext.Sites on studies.Id equals sites.Study
+                join subjects in _dataQCDbContext.Subjects on studies.Id equals subjects.Study
+                join imageStudy in _dataQCDbContext.ImageStudies on sites.Id equals imageStudy.Site
+                join imageStudyQcTasks in _dataQCDbContext.ImageStudyQcTasks on imageStudy.Id equals imageStudyQcTasks.ImageStudy
+                join imageStudyQcTaskStatus in _dataQCDbContext.ImageStudyQcTaskStatuses on imageStudyQcTasks.Status equals imageStudyQcTaskStatus.Id
+                join visits in _dataQCDbContext.PlannedVisits on imageStudy.PlannedVisit equals visits.Id
+                join modality in _dataQCDbContext.DefinedModalities on imageStudy.DefinedModality equals modality.Id
+                where imageStudyQcTasks.Identifier == taskId
+                select new QCTaskDto
+                {
+                    Id = studies.Id,
+                    StudyId = studies.Identifier,
+                    Sponsor = sponsor.Name,
+                    Modality = modality.Name,
+                    Site = sites.Identifier,
+                    Subject = subjects.Identifier,
+                    SiteStatus = sites.Status,
+                    SubjectStatus = subjects.Status,
+                    TaskStatus = imageStudyQcTaskStatus.Name,
+                    ImageRecId = imageStudy.Identifier,
+                    ImageStudyQCTaskId = imageStudyQcTasks.Identifier,
+                    Visit = visits.Name,
+                    ModifiedBy = studies.ModifiedBy,
+                    ModifiedDatetime = studies.ModifiedDatetime,
+                    Modalities = queryResDIS.Select(m => new QCTaskDto.ModalityResponseQC
+                    {
+                        Id = m.DefinedModalityId,
+                        Modality = m.DefinedModalities,
+                        imageSeries = queryResImageSeries.Where(img => img.DefinedModalityId == m.DefinedModalityId)
+                            .Select(img => new ImageSeriesQC
+                            {
+                                Id = img.DefinedImageSeriesId.ToString(),
+                                Name = img.DefinedImageSeries,
+                                assignedSeries = assignedSeriesResult.Select(asg => new AssignedSeries
+                                {
+                                    Id = asg.Id,
+                                    Name = asg.Name
+                                }).ToList()
+                            }).ToList()
+                    }).ToList()
+                };
+
+    return await query.ToListAsync();
+}
