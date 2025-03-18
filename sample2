@@ -69,3 +69,143 @@ public void GetModalities_ReturnsGroupedModalitiesWithImageSeriesAndAssignedSeri
     Assert.That(modalitiesQuery[0].ImageSeries[0].AssignedSeries.Count, Is.EqualTo(1));
     Assert.That(modalitiesQuery[0].ImageSeries[0].AssignedSeries[0].Name, Is.EqualTo("Series A"));
 }
+
+
+[Test]
+public void ModalitiesMapping_GroupsCorrectly_AndMapsImageSeriesWithAssignedSeries()
+{
+    // Arrange
+    var queryResDIS = new List<dynamic>
+    {
+        new { DefinedModalityId = 1, DefinedModalityName = "CT" },
+        new { DefinedModalityId = 2, DefinedModalityName = "MRI" },
+        new { DefinedModalityId = 1, DefinedModalityName = "CT" }, // Duplicate for grouping test
+    };
+
+    var queryResImageSeries = new List<dynamic>
+    {
+        new { DefinedImageSeriesId = 100, DefinedImageSeries = "SeriesA", DefinedModalityId = 1 },
+        new { DefinedImageSeriesId = 200, DefinedImageSeries = "SeriesB", DefinedModalityId = 2 },
+        new { DefinedImageSeriesId = 100, DefinedImageSeries = "SeriesA", DefinedModalityId = 1 }, // Duplicate
+    };
+
+    var assignedSeriesResult = new List<AssignedSeries>
+    {
+        new AssignedSeries { Id = 100, Name = "AssignedA" },
+        new AssignedSeries { Id = 200, Name = "AssignedB" },
+    };
+
+    // Act
+    var modalities = queryResDIS
+        .GroupBy(m => new { m.DefinedModalityId, m.DefinedModalityName })  // Grouping ensures uniqueness
+        .Select(group => new QCTaskDto.ModalityResponseQC
+        {
+            Id = group.Key.DefinedModalityId,
+            Modality = group.Key.DefinedModalityName,
+            imageSeries = queryResImageSeries
+                .Where(img => img.DefinedModalityId == group.Key.DefinedModalityId)
+                .Select(img => new ImageSeriesQC
+                {
+                    Id = img.DefinedImageSeriesId.ToString(),
+                    Name = img.DefinedImageSeries,
+                    assignedSeries = assignedSeriesResult
+                        .Where(asg => asg.Id == img.DefinedImageSeriesId)
+                        .Select(asg => new AssignedSeries
+                        {
+                            Id = asg.Id,
+                            Name = asg.Name
+                        }).ToList()
+                }).ToList()
+        }).ToList();
+
+    // Assert
+    Assert.AreEqual(2, modalities.Count, "Should group into 2 unique modalities.");
+
+    var ctModality = modalities.FirstOrDefault(m => m.Modality == "CT");
+    Assert.IsNotNull(ctModality);
+    Assert.AreEqual(1, ctModality.Id);
+    Assert.AreEqual(2, ctModality.imageSeries.Count, "CT modality should have 2 image series mapped.");
+
+    var firstSeries = ctModality.imageSeries.First();
+    Assert.AreEqual("100", firstSeries.Id);
+    Assert.AreEqual("SeriesA", firstSeries.Name);
+    Assert.AreEqual(1, firstSeries.assignedSeries.Count, "Assigned series should be mapped correctly.");
+    Assert.AreEqual("AssignedA", firstSeries.assignedSeries.First().Name);
+}
+
+
+
+[TestFixture]
+public class DataServiceTests
+{
+    private Mock<DataQCDbContext> _mockContext;
+    private IDataService _dataService;
+
+    [SetUp]
+    public void Setup()
+    {
+        _mockContext = new Mock<DataQCDbContext>();
+        _dataService = new DataService(_mockContext.Object); // Assuming your service has this constructor
+    }
+
+    [Test]
+    public async Task GetImageQCTask_FiltersByModalityName_CaseInsensitive()
+    {
+        // Arrange
+        var modalityNames = new List<string> { "CT Scan", "MRI" }; // Case mix
+        var studyIdentifiers = new List<string> { "208431", "208432" };
+
+        // Setup mock data
+        var studies = new List<Study>
+        {
+            new Study { Id = 1, Identifier = "208431" },
+            new Study { Id = 2, Identifier = "208432" },
+        }.AsQueryable();
+
+        var definedModalities = new List<DefinedModality>
+        {
+            new DefinedModality { Id = 1, Name = "ct scan" },  // Lowercase to test case-insensitive match
+            new DefinedModality { Id = 2, Name = "MRI" },
+            new DefinedModality { Id = 3, Name = "Ultrasound" } // Should not match
+        }.AsQueryable();
+
+        var imageProtocols = new List<ImageProtocol>
+        {
+            new ImageProtocol { Id = 1, Study = 1 },
+            new ImageProtocol { Id = 2, Study = 2 },
+        }.AsQueryable();
+
+        var definedImageSeries = new List<DefinedImageSeries>
+        {
+            new DefinedImageSeries { Id = 1, Name = "Series1", DefinedModality = 1, Protocol = 1 },
+            new DefinedImageSeries { Id = 2, Name = "Series2", DefinedModality = 2, Protocol = 2 },
+        }.AsQueryable();
+
+        var imageSeries = new List<ImageSeries>
+        {
+            new ImageSeries { Id = 1, Name = "Image1", DefinedImageSeries = 1 },
+            new ImageSeries { Id = 2, Name = "Image2", DefinedImageSeries = 2 },
+        }.AsQueryable();
+
+        // Mock DbSets
+        _mockContext.Setup(c => c.Studies).Returns(DbSetMock.CreateMockSet(studies).Object);
+        _mockContext.Setup(c => c.DefinedModalities).Returns(DbSetMock.CreateMockSet(definedModalities).Object);
+        _mockContext.Setup(c => c.ImageProtocols).Returns(DbSetMock.CreateMockSet(imageProtocols).Object);
+        _mockContext.Setup(c => c.DefinedImageSeries).Returns(DbSetMock.CreateMockSet(definedImageSeries).Object);
+        _mockContext.Setup(c => c.ImageSeries).Returns(DbSetMock.CreateMockSet(imageSeries).Object);
+
+        // Act
+        var result = await _dataService.GetImageQCTask("someTaskId"); // Assuming it internally uses studyIdentifiers & modalityNames
+
+        // Assert
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.Any());
+
+        // Ensure only matching modalities (case-insensitive) are returned
+        var modalitiesInResult = result.SelectMany(r => r.Modalities).Select(m => m.Modality).Distinct().ToList();
+
+        CollectionAssert.AreEquivalent(new[] { "ct scan", "MRI" }, modalitiesInResult, 
+            "Only modalities matching input list (case-insensitive) should be included.");
+    }
+}
+
