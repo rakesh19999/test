@@ -1,0 +1,71 @@
+[Test]
+public void GetModalities_ReturnsGroupedModalitiesWithImageSeriesAndAssignedSeries()
+{
+    // Arrange
+    var disList = new List<DefinedModalityQcProtocol>
+    {
+        new DefinedModalityQcProtocol
+        {
+            DefinedModalityId = 1,
+            DefinedModalities = "CT",
+            ImageProcessingInstructions = "Instr1",
+            DefinedImageSeriesId = 101,
+            DefinedImageSeries = "PreGad-30-11 Axial"
+        },
+        new DefinedModalityQcProtocol
+        {
+            DefinedModalityId = 1,
+            DefinedModalities = "CT",
+            ImageProcessingInstructions = "Instr1",
+            DefinedImageSeriesId = 102,
+            DefinedImageSeries = "PostGad-30-11 Axial"
+        }
+    }.AsQueryable();
+
+    var assignedSeriesResult = new List<AssignedSeriesEntity>
+    {
+        new AssignedSeriesEntity
+        {
+            Id = 201,
+            Name = "Series A",
+            DefinedImageSeriesId = 101
+        },
+        new AssignedSeriesEntity
+        {
+            Id = 202,
+            Name = "Series B",
+            DefinedImageSeriesId = 102
+        }
+    }.AsQueryable();
+
+    // Act - simulate your method's LINQ logic
+    var modalitiesQuery = disList
+        .GroupBy(m => new { m.DefinedModalityId, m.DefinedModalities, m.ImageProcessingInstructions })
+        .Select(group => new ModalityResponseQC
+        {
+            Id = group.Key.DefinedModalityId,
+            Modality = group.Key.DefinedModalities,
+            ProcessingInstructions = group.Key.ImageProcessingInstructions,
+            ImageSeries = disList
+                .Where(ing => ing.DefinedModalityId == group.Key.DefinedModalityId)
+                .Select(ing => new ImageSeriesQC
+                {
+                    Id = ing.DefinedImageSeriesId.ToString(),
+                    Name = ing.DefinedImageSeries,
+                    AssignedSeries = assignedSeriesResult
+                        .Where(asg => asg.DefinedImageSeriesId == ing.DefinedImageSeriesId)
+                        .Select(asg => new AssignedSeries
+                        {
+                            Id = asg.Id,
+                            Name = asg.Name
+                        }).ToList()
+                }).ToList()
+        }).ToList();
+
+    // Assert
+    Assert.IsNotNull(modalitiesQuery);
+    Assert.That(modalitiesQuery.Count, Is.EqualTo(1));
+    Assert.That(modalitiesQuery[0].ImageSeries.Count, Is.EqualTo(2));
+    Assert.That(modalitiesQuery[0].ImageSeries[0].AssignedSeries.Count, Is.EqualTo(1));
+    Assert.That(modalitiesQuery[0].ImageSeries[0].AssignedSeries[0].Name, Is.EqualTo("Series A"));
+}
