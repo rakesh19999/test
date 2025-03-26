@@ -5,42 +5,49 @@ import { Plus, Save } from "lucide-react";
 const HelpfulLinks = () => {
   const [links, setLinks] = useState([
     { id: 1, title: "GCIL-PDF", url: "https://example.com/pdf1" },
-    { id: 2, title: "GCIL-PDF 2", url: "https://example.com/pdf2" },
-    { id: 3, title: "GCIL-PDF 3", url: "https://example.com/pdf3" },
+    { id: 2, title: "GCIL-PDF2", url: "https://example.com/pdf2" },
+    { id: 3, title: "GCIL-PDF-3", url: "https://example.com/pdf3" },
   ]);
 
   const [newTitle, setNewTitle] = useState("");
   const [newUrl, setNewUrl] = useState("");
-  const [isEditing, setIsEditing] = useState(null);
   const [showInputs, setShowInputs] = useState(false);
+  const [editId, setEditId] = useState(null);
 
-  const addLink = () => {
+  const addOrUpdateLink = () => {
     if (newTitle.trim() && newUrl.trim()) {
-      const newLink = { id: Date.now(), title: newTitle, url: newUrl };
-
-      setLinks((prevLinks) => {
-        const updatedLinks = [...prevLinks, newLink];
-        console.log("Updated Links:", updatedLinks); // ✅ Check if new object is added
-        return updatedLinks;
-      });
-
+      if (editId) {
+        // Update existing link
+        setLinks(
+          links.map((link) =>
+            link.id === editId
+              ? { ...link, title: newTitle, url: newUrl }
+              : link
+          )
+        );
+      } else {
+        // Add new link
+        setLinks([
+          ...links,
+          { id: links.length + 1, title: newTitle, url: newUrl },
+        ]);
+      }
+      setShowInputs(false);
+      setEditId(null);
       setNewTitle("");
       setNewUrl("");
-      setShowInputs(false);
     }
   };
 
-  const editLink = (id, newTitle) => {
-    setLinks((prevLinks) =>
-      prevLinks.map((link) =>
-        link.id === id ? { ...link, title: newTitle } : link
-      )
-    );
-    setIsEditing(null);
+  const handleEdit = (link) => {
+    setNewTitle(link.title);
+    setNewUrl(link.url);
+    setEditId(link.id);
+    setShowInputs(true);
   };
 
   const deleteLink = (id) => {
-    setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
+    setLinks(links.filter((link) => link.id !== id));
   };
 
   return (
@@ -55,26 +62,15 @@ const HelpfulLinks = () => {
       <div className="links-container">
         {links.map((link) => (
           <span key={link.id} className="link-item">
-            {isEditing === link.id ? (
-              <input
-                type="text"
-                defaultValue={link.title}
-                onBlur={(e) => editLink(link.id, e.target.value)}
-                autoFocus
-              />
-            ) : (
-              <>
-                <a href={link.url} target="_blank" rel="noopener noreferrer">
-                  {link.title}
-                </a>
-                <button
-                  className="close-button"
-                  onClick={() => deleteLink(link.id)}
-                >
-                  ✖
-                </button>
-              </>
-            )}
+            <span onClick={() => handleEdit(link)} className="editable-link">
+              {link.title}
+            </span>
+            <button
+              className="close-button"
+              onClick={() => deleteLink(link.id)}
+            >
+              ✖
+            </button>
           </span>
         ))}
       </div>
@@ -98,7 +94,7 @@ const HelpfulLinks = () => {
               required
             />
             <label className={newUrl ? "active" : ""}>Links</label>
-            <button className="save-button" onClick={addLink}>
+            <button className="save-button" onClick={addOrUpdateLink}>
               <Save size={16} />
             </button>
           </div>
