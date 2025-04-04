@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import "./App.css";
-import { Plus, Save } from "lucide-react";
+import { Plus, Save, X } from "lucide-react";
 
 const HelpfulLinks = () => {
   const [links, setLinks] = useState([
@@ -18,8 +18,8 @@ const HelpfulLinks = () => {
     if (newTitle.trim() && newUrl.trim()) {
       if (editId) {
         // Update existing link
-        setLinks(
-          links.map((link) =>
+        setLinks((prevLinks) =>
+          prevLinks.map((link) =>
             link.id === editId
               ? { ...link, title: newTitle, url: newUrl }
               : link
@@ -27,15 +27,12 @@ const HelpfulLinks = () => {
         );
       } else {
         // Add new link
-        setLinks([
-          ...links,
-          { id: links.length + 1, title: newTitle, url: newUrl },
+        setLinks((prevLinks) => [
+          ...prevLinks,
+          { id: prevLinks.length + 1, title: newTitle, url: newUrl },
         ]);
       }
-      setShowInputs(false);
-      setEditId(null);
-      setNewTitle("");
-      setNewUrl("");
+      closeInputContainer();
     }
   };
 
@@ -47,15 +44,33 @@ const HelpfulLinks = () => {
   };
 
   const deleteLink = (id) => {
-    setLinks(links.filter((link) => link.id !== id));
+    setLinks((prevLinks) => prevLinks.filter((link) => link.id !== id));
+  };
+
+  const toggleInputContainer = () => {
+    if (showInputs) {
+      closeInputContainer();
+    } else {
+      setNewTitle(""); // Reset values
+      setNewUrl("");
+      setEditId(null);
+      setShowInputs(true);
+    }
+  };
+
+  const closeInputContainer = () => {
+    setShowInputs(false);
+    setEditId(null);
+    setNewTitle(""); // Reset on close
+    setNewUrl("");
   };
 
   return (
     <div className="helpful-links">
       <div className="header">
         <h3>Helpful Links</h3>
-        <button className="add-button" onClick={() => setShowInputs(true)}>
-          <Plus size={16} />
+        <button className="toggle-button" onClick={toggleInputContainer}>
+          {showInputs ? <X size={16} /> : <Plus size={16} />}
         </button>
       </div>
 
