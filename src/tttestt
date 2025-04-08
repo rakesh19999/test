@@ -1,0 +1,103 @@
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import HelpfulLinks from "./HelpfulLinks";
+import "@testing-library/jest-dom";
+
+describe("HelpfulLinks Component", () => {
+  const setup = (value = [], onChange = jest.fn()) => {
+    render(<HelpfulLinks value={value} onChange={onChange} />);
+  };
+
+  it("renders existing links", () => {
+    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
+    setup(links);
+    expect(screen.getByText("Google")).toBeInTheDocument();
+  });
+
+  it("adds a new link", () => {
+    const handleChange = jest.fn();
+    setup([], handleChange);
+
+    fireEvent.click(screen.getByRole("button")); // click plus icon
+
+    fireEvent.change(screen.getByLabelText(/title/i), {
+      target: { value: "OpenAI" },
+    });
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: "https://openai.com" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "" })); // save button with icon
+
+    expect(handleChange).toHaveBeenCalledWith([
+      expect.objectContaining({ title: "OpenAI", links: "https://openai.com" }),
+    ]);
+  });
+
+  it("shows error for duplicate title", () => {
+    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
+    setup(links);
+
+    fireEvent.click(screen.getByRole("button")); // click plus
+
+    fireEvent.change(screen.getByLabelText(/title/i), {
+      target: { value: "Google" },
+    });
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: "https://another.com" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "" })); // save button
+
+    expect(
+      screen.getByText(/duplicate titles are not allowed/i)
+    ).toBeInTheDocument();
+  });
+
+  it("edits a link", () => {
+    const handleChange = jest.fn();
+    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
+    setup(links, handleChange);
+
+    fireEvent.click(screen.getByText("Google"));
+
+    fireEvent.change(screen.getByLabelText(/title/i), {
+      target: { value: "Google Search" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "" })); // save button
+
+    expect(handleChange).toHaveBeenCalledWith([
+      expect.objectContaining({ title: "Google Search" }),
+    ]);
+  });
+
+  it("deletes a link", () => {
+    const handleChange = jest.fn();
+    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
+    setup(links, handleChange);
+
+    fireEvent.click(screen.getByText("✖"));
+
+    expect(handleChange).toHaveBeenCalledWith([]);
+  });
+
+  it("shows validation error for invalid URL", () => {
+    setup([]);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    fireEvent.change(screen.getByLabelText(/title/i), {
+      target: { value: "Invalid Link" },
+    });
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: "ftp://invalid-url" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "" }));
+
+    expect(
+      screen.getByText(/invalid url. only http and https links are allowed/i)
+    ).toBeInTheDocument();
+  });
+});
