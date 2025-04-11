@@ -1,103 +1,146 @@
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import HelpfulLinks from "./HelpfulLinks";
-import "@testing-library/jest-dom";
+import { Constants } from "../../common/constants";
+
+// Mock Constants
+jest.mock("../../common/constants", () => ({
+  Constants: {
+    helfulLinkTitleError: "Title is too long",
+    helfultinktinkError: "URL is too long",
+    invalidURL: "Invalid URL",
+    duplicateTitle: "Duplicate title found",
+    maxInfo: "You can add up to 5 links",
+  },
+  urlRegex: /^(https?):\/\/[^\s$.?#].[^\s]*$/gm,
+}));
+
+const defaultProps = {
+  value: [],
+  onChange: jest.fn(),
+  isPublished: true,
+};
 
 describe("HelpfulLinks Component", () => {
-  const setup = (value = [], onChange = jest.fn()) => {
-    render(<HelpfulLinks value={value} onChange={onChange} />);
-  };
-
-  it("renders existing links", () => {
-    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
-    setup(links);
-    expect(screen.getByText("Google")).toBeInTheDocument();
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it("adds a new link", () => {
-    const handleChange = jest.fn();
-    setup([], handleChange);
+  test("renders component with header", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    expect(screen.getByText("Helpful Links")).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button")); // click plus icon
+  test("shows input fields when add button is clicked", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    const addButton = screen.getByRole("button", { name: /addlink/i });
+    fireEvent.click(addButton);
+    expect(screen.getByLabelText(/link title/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/link/i)).toBeInTheDocument();
+  });
 
-    fireEvent.change(screen.getByLabelText(/title/i), {
-      target: { value: "OpenAI" },
+  test("disables save button when inputs are empty", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
+    expect(screen.getByRole("button", { name: /savehelpfullinks/i })).toBeDisabled();
+  });
+
+  test("shows title too long error", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
+
+    fireEvent.change(screen.getByLabelText(/link title/i), {
+      target: { value: "A".repeat(21) },
     });
+
     fireEvent.change(screen.getByLabelText(/link/i), {
-      target: { value: "https://openai.com" },
+      target: { value: "https://example.com" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "" })); // save button with icon
+    fireEvent.click(screen.getByRole("button", { name: /savehelpfullinks/i }));
+    expect(screen.getByText("Title is too long")).toBeInTheDocument();
+  });
 
-    expect(handleChange).toHaveBeenCalledWith([
-      expect.objectContaining({ title: "OpenAI", links: "https://openai.com" }),
+  test("shows URL too long error", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
+
+    fireEvent.change(screen.getByLabelText(/link title/i), {
+      target: { value: "Test Title" },
+    });
+
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: `https://${"a".repeat(2001)}.com` },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /savehelpfullinks/i }));
+    expect(screen.getByText("URL is too long")).toBeInTheDocument();
+  });
+
+  test("shows invalid URL error", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
+
+    fireEvent.change(screen.getByLabelText(/link title/i), {
+      target: { value: "Test Title" },
+    });
+
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: "not-a-valid-url" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /savehelpfullinks/i }));
+    expect(screen.getByText("Invalid URL")).toBeInTheDocument();
+  });
+
+  test("calls onChange with new link on valid input", () => {
+    render(<HelpfulLinks {...defaultProps} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
+
+    fireEvent.change(screen.getByLabelText(/link title/i), {
+      target: { value: "New Link" },
+    });
+
+    fireEvent.change(screen.getByLabelText(/link/i), {
+      target: { value: "https://valid.com" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /savehelpfullinks/i }));
+    expect(defaultProps.onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ title: "New Link", link: "https://valid.com" }),
     ]);
   });
 
-  it("shows error for duplicate title", () => {
-    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
-    setup(links);
+  test("prevents adding duplicate titles", () => {
+    const existingLinks = [{ id: 1, title: "Google", link: "https://google.com" }];
+    render(<HelpfulLinks {...defaultProps} value={existingLinks} />);
+    fireEvent.click(screen.getByRole("button", { name: /addlink/i }));
 
-    fireEvent.click(screen.getByRole("button")); // click plus
-
-    fireEvent.change(screen.getByLabelText(/title/i), {
-      target: { value: "Google" },
+    fireEvent.change(screen.getByLabelText(/link title/i), {
+      target: { value: "google" },
     });
+
     fireEvent.change(screen.getByLabelText(/link/i), {
-      target: { value: "https://another.com" },
+      target: { value: "https://duplicate.com" },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "" })); // save button
-
-    expect(
-      screen.getByText(/duplicate titles are not allowed/i)
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /savehelpfullinks/i }));
+    expect(screen.getByText("Duplicate title found")).toBeInTheDocument();
   });
 
-  it("edits a link", () => {
-    const handleChange = jest.fn();
-    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
-    setup(links, handleChange);
-
-    fireEvent.click(screen.getByText("Google"));
-
-    fireEvent.change(screen.getByLabelText(/title/i), {
-      target: { value: "Google Search" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "" })); // save button
-
-    expect(handleChange).toHaveBeenCalledWith([
-      expect.objectContaining({ title: "Google Search" }),
-    ]);
+  test("deletes a link", () => {
+    const link = { id: 1, title: "To Delete", link: "https://todelete.com" };
+    render(<HelpfulLinks {...defaultProps} value={[link]} />);
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+    expect(defaultProps.onChange).toHaveBeenCalledWith([]);
   });
 
-  it("deletes a link", () => {
-    const handleChange = jest.fn();
-    const links = [{ id: 1, title: "Google", links: "https://google.com" }];
-    setup(links, handleChange);
+  test("edit pre-fills fields", () => {
+    const link = { id: 2, title: "To Edit", link: "https://toedit.com" };
+    render(<HelpfulLinks {...defaultProps} value={[link]} />);
+    fireEvent.click(screen.getByText("To Edit")); // span with editable text
 
-    fireEvent.click(screen.getByText("✖"));
-
-    expect(handleChange).toHaveBeenCalledWith([]);
-  });
-
-  it("shows validation error for invalid URL", () => {
-    setup([]);
-
-    fireEvent.click(screen.getByRole("button"));
-
-    fireEvent.change(screen.getByLabelText(/title/i), {
-      target: { value: "Invalid Link" },
-    });
-    fireEvent.change(screen.getByLabelText(/link/i), {
-      target: { value: "ftp://invalid-url" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "" }));
-
-    expect(
-      screen.getByText(/invalid url. only http and https links are allowed/i)
-    ).toBeInTheDocument();
+    expect(screen.getByDisplayValue("To Edit")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://toedit.com")).toBeInTheDocument();
   });
 });
