@@ -1,0 +1,230 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import ProtocolComplianceQCChecksTable from './ProtocolComplianceQCChecksTable';
+
+const columns = [
+  { Header: 'Checkbox', accessor: 'select' },
+  { Header: 'Name', accessor: 'name' },
+  { Header: 'Check Condition', accessor: 'qcCondition' },
+];
+
+const data = [
+  { imageSeriesQCCheckId: 1, name: 'Series 1', diconTag: 'Tag1', qcCondition: '' },
+  { imageSeriesQCCheckId: 2, name: 'Series 2', diconTag: 'Tag2', qcCondition: '' },
+];
+
+const checkCondition = ['PASS: Pass', 'FAIL: Fail'];
+
+test('renders table with rows', () => {
+  render(
+    <ProtocolComplianceQCChecksTable
+      data={data}
+      columns={columns}
+      checkCondition={checkCondition}
+    />
+  );
+
+  expect(screen.getByText('Series 1')).toBeInTheDocument();
+  expect(screen.getByText('Series 2')).toBeInTheDocument();
+});
+
+test('selects a row via checkbox', () => {
+  const handleSelectionChange = jest.fn();
+
+  render(
+    <ProtocolComplianceQCChecksTable
+      data={data}
+      columns={columns}
+      checkCondition={checkCondition}
+      onSelectionChange={handleSelectionChange}
+    />
+  );
+
+  const checkboxes = screen.getAllByRole('checkbox');
+  fireEvent.click(checkboxes[1]);
+
+  expect(handleSelectionChange).toHaveBeenCalledWith([expect.objectContaining({ name: 'Series 1' })]);
+});
+
+test('displays dropdown when row is selected', () => {
+  render(
+    <ProtocolComplianceQCChecksTable
+      data={data}
+      columns={columns}
+      checkCondition={checkCondition}
+    />
+  );
+
+  const checkboxes = screen.getAllByRole('checkbox');
+  fireEvent.click(checkboxes[1]); // Select row 1
+
+  const select = screen.getByRole('combobox');
+  expect(select).toBeInTheDocument();
+  fireEvent.change(select, { target: { value: 'PASS' } });
+
+  expect(select.value).toBe('PASS');
+});
+----
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
+import { fetchPCCheckList } from '../../services/QcFormService';
+import { patchStudyDicomQCCheckConfiguration } from '../../services/StudyService';
+import { ToastContainer } from 'react-toastify';
+
+// Mock services
+jest.mock('../../services/QcFormService', () => ({
+  fetchPCCheckList: jest.fn(),
+}));
+
+jest.mock('../../services/StudyService', () => ({
+  patchStudyDicomQCCheckConfiguration: jest.fn(),
+}));
+
+// Mock token utility
+jest.mock('../../common/AccessToken', () => ({
+  GetAccessToken: jest.fn(() => 'mock-token'),
+}));
+
+// Mock msal
+jest.mock('@azure/msal-react', () => ({
+  useMsal: () => ({
+    instance: {},
+    inProgress: 'none',
+  }),
+}));
+
+const defaultProps = {
+  show: true,
+  title: 'Test QC Checks',
+  id: '1',
+  modalityId: '1',
+  studyId: '123',
+  listKeyFunc: jest.fn(),
+  refreshKey: 0,
+  handleClose: jest.fn(),
+};
+
+const mockQCData = [
+  {
+    imageSeriesQCCheckId: 1,
+    dicomTag: '0010,0010',
+    name: 'Patient Name',
+    checkCondition: 'equals',
+    expectedValue: 'John Doe',
+    description: 'Check patient name',
+    attributeid: 101,
+  },
+];
+
+describe('ProtocolComplianceQCChecks', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('renders modal with title', () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    expect(screen.getByText(/Protocol Compliance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Test QC Checks/i)).toBeInTheDocument();
+  });
+
+  test('search field works and calls fetchPCCheckList', async () => {
+    (fetchPCCheckList as jest.Mock).mockResolvedValueOnce({ pcCheckList: mockQCData });
+
+    render(
+      <>
+        <ProtocolComplianceQCChecks {...defaultProps} />
+        <ToastContainer />
+      </>
+    );
+
+    const input = screen.getByPlaceholderText('Search');
+    await userEvent.type(input, 'Patient');
+
+    const searchBtn = screen.getByRole('button', { name: /search/i });
+    expect(searchBtn).toBeEnabled();
+
+    fireEvent.click(searchBtn);
+
+    await waitFor(() => {
+      expect(fetchPCCheckList).toHaveBeenCalled();
+      expect(screen.getByText('Patient Name')).toBeInTheDocument();
+      expect(screen.getByText('Check patient name')).toBeInTheDocument();
+    });
+  });
+
+  test('clear button resets search input', async () => {
+    (fetchPCCheckList as jest.Mock).mockResolvedValueOnce({ pcCheckList: [] });
+
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    const input = screen.getByPlaceholderText('Search');
+    await userEvent.type(input, 'CT Head');
+
+    const clearIcon = screen.getByText((_, el) => el?.className?.includes('clear-icon-pc') ?? false);
+    fireEvent.click(clearIcon);
+
+    expect(input).toHaveValue('');
+  });
+
+  test('renders table with data and selects checkbox', async () => {
+    (fetchPCCheckList as jest.Mock).mockResolvedValueOnce({ pcCheckList: mockQCData });
+
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    await waitFor(() => {
+      expect(screen.getByText('Patient Name')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeInTheDocument();
+    fireEvent.click(checkbox);
+  });
+
+  test('calls save API with selected checks', async () => {
+    (fetchPCCheckList as jest.Mock).mockResolvedValueOnce({ pcCheckList: mockQCData });
+    (patchStudyDicomQCCheckConfiguration as jest.Mock).mockResolvedValueOnce({});
+
+    render(
+      <>
+        <ProtocolComplianceQCChecks {...defaultProps} />
+        <ToastContainer />
+      </>
+    );
+
+    await waitFor(() => screen.getByText('Patient Name'));
+
+    const checkbox = screen.getByRole('checkbox');
+    fireEvent.click(checkbox);
+
+    const saveBtn = screen.getByRole('button', { name: /save/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(patchStudyDicomQCCheckConfiguration).toHaveBeenCalled();
+      expect(screen.getByText(/Saved Successfully!/i)).toBeInTheDocument();
+    });
+  });
+
+  test('handles save API failure gracefully', async () => {
+    (fetchPCCheckList as jest.Mock).mockResolvedValueOnce({ pcCheckList: mockQCData });
+    (patchStudyDicomQCCheckConfiguration as jest.Mock).mockRejectedValueOnce(new Error('Save failed'));
+
+    render(
+      <>
+        <ProtocolComplianceQCChecks {...defaultProps} />
+        <ToastContainer />
+      </>
+    );
+
+    await waitFor(() => screen.getByText('Patient Name'));
+    const checkbox = screen.getByRole('checkbox');
+    fireEvent.click(checkbox);
+
+    const saveBtn = screen.getByRole('button', { name: /save/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to Save Changes!/i)).toBeInTheDocument();
+    });
+  });
+});
