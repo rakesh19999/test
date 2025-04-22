@@ -1,0 +1,48 @@
+// First prepare the SavedQcChecks
+var savedQcChecks = 
+    from dmqcc in context.DefinedModalityQCChecks
+    join dmacp in context.DefinedModalityQcProtocols on dmqcc.DefinedModalityQcProtocol equals dmacp.Id
+    join dm in context.DefinedModalities on dmacp.DefinedModality equals dm.Id
+    join m in context.Modalities on dm.Modality equals m.Id
+    join iqcp in context.ImageQcProtocols on dmacp.ImageQCProtocol equals iqcp.Id
+    join std in context.Studies on iqcp.Study equals std.Id
+    join isqcf in context.ImageSeriesQCFunctions on dmqcc.ImageSeriesQCFunction equals isqcf.Id into isqcfGroup
+    from isqcf in isqcfGroup.DefaultIfEmpty()
+    select new 
+    {
+        savedDMQcCHKID = dmqcc.Id,
+        savedImageSeriesQCCheckId = dmqcc.ImageSeriesQCCheck,
+        DefinedModality = dmqcp.DefinedModality,
+        protocolid = dmacp.Id,
+        Study = iqcp.Study,
+        ModalityName = m.Name,
+        ImageQCProtocol = dmqcp.ImageQCProtocol,
+        DefinedModalityId = dm.Id,
+        FunctionId = isqcf != null ? isqcf.Id : (int?)null,
+        FunctionName = isqcf != null ? isqcf.Name : null,
+        ImageSeriesQCFunctionParameterValue = dmqcc.ImageSeriesQCFunctionParameterValue,
+        Description = dmqcc.Description
+    };
+
+// Then prepare the main query
+var query = 
+    from isqc in context.ImageSeriesQcChecks
+    join isa in context.ImageSeriesAttributes on isqc.Attribute equals isa.Id
+    join isqcm in context.ImageSeriesQCCheckModalities on isqc.Id equals isqcm.ImageSeriesQcCheck
+    join m in context.Modalities on isqcm.Modality equals m.Id
+    join sqc in savedQcChecks on isqc.Id equals sqc.savedImageSeriesQCCheckId into sqcGroup
+    from sqc in sqcGroup.DefaultIfEmpty()
+    where sqc.Study == 27 && sqc.DefinedModalityId == 6
+    select new
+    {
+        MasterImageQCId = isqc.Id,
+        SavedImageSeriesQCCheckId = sqc != null ? sqc.savedImageSeriesQCCheckId : (int?)null,
+        SavedDMQcCHKID = sqc != null ? sqc.savedDMQcCHKID : (int?)null,
+        Study = sqc != null ? sqc.Study : (int?)null,
+        Attribute = isa.Attribute,
+        ModalityId = m.Id,
+        ModalityName = m.Name,
+        FunctionId = sqc != null && sqc.FunctionId.HasValue ? sqc.FunctionId : isqc.FunctionId,
+        Description = !string.IsNullOrEmpty(sqc.Description) ? sqc.Description : isqc.Description,
+        ExpectedValue = sqc != null ? sqc.ImageSeriesQCFunctionParameterValue : null
+    };
