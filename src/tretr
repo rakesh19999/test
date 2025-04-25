@@ -1,9 +1,8 @@
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, Form } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
 import '../../css/App.css';
-import { ProtocolcomplianceQCChecksModality } from '../../interface/QCForm';
 
 interface ProtocolComplianceQCChecksProps {
   data: any[];
@@ -20,7 +19,7 @@ const ProtocolComplianceQCChecksTable: React.FC<ProtocolComplianceQCChecksProps>
   onSelectionChange,
   checkCondition,
   onAnyCheckChange,
-  isPublished
+  isPublished,
 }) => {
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const [localData, setLocalData] = useState<any[]>([]);
@@ -29,72 +28,28 @@ const ProtocolComplianceQCChecksTable: React.FC<ProtocolComplianceQCChecksProps>
   const [userModifiedData, setUserModifiedData] = useState<any[]>([]);
 
   useEffect(() => {
-    const cloned = data.map(row => ({ ...row }));
-    setLocalData(cloned);
-    const preselected = cloned.filter(r => r.isChecked);
+    // Ensure data retains definedModalityQcCheckId
+    const clonedData = data.map((row) => ({
+      ...row,
+      definedModalityQcCheckId: row.definedModalityQcCheckId || '', // ensure it's not undefined
+    }));
+    setLocalData(clonedData);
+
+    // Set preselected rows with definedModalityQcCheckId
+    const preselected = clonedData.filter((r) => r.isChecked && r.definedModalityQcCheckId !== '');
     setSelectedRows(preselected);
     onSelectionChange?.(preselected);
   }, [data]);
 
-  const clearAll = (e: React.MouseEvent<HTMLSpanElement>) => {
-    e.preventDefault();
-    setSearch('');
-    setIsFieldDisabled(true);
-    setLocalData(data.map(row => ({ ...row })));
-  };
-
-  const isEmpty = (value: string): boolean => {
-    return value === undefined || value.trim().length === 0;
-  };
-
-  const toggleActive = (value: string): void => {
-    setIsFieldDisabled(isEmpty(value));
-  };
-
-  const onSearchChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
-    const value = e.target.value;
-    setSearch(value);
-    toggleActive(value);
-  };
-
-  const onSubmitSearch = (): void => {
-    const trimmedSearch = search.trim();
-    if (trimmedSearch.length === 0) return;
-
-    const lowercasedValue = trimmedSearch.toLowerCase();
-    const filtered = data.filter(item =>
-      item.dicomTag?.toLowerCase().includes(lowercasedValue) ||
-      item.name?.toLowerCase().includes(lowercasedValue)
-    );
-
-    setLocalData(filtered);
-  };
-
   const handleCheckBoxChange = (rowIndex: number, checked: boolean) => {
     const updatedLocalData = [...localData];
-    const row = updatedLocalData[rowIndex];
-    row.isChecked = checked;
+    updatedLocalData[rowIndex].isChecked = checked;
 
-    let updatedSelection = [...selectedRows];
-    const existingIndex = updatedSelection.findIndex(r => r.ImageSeriesQCCheckId === row.ImageSeriesQCCheckId);
-
-    if (checked) {
-      if (existingIndex === -1) {
-        updatedSelection.push({ ...row, isDeselected: false });
-      } else {
-        updatedSelection[existingIndex].isDeselected = false;
-      }
-    } else {
-      if (row.isPreselected) {
-        if (existingIndex === -1) {
-          updatedSelection.push({ ...row, isDeselected: true });
-        } else {
-          updatedSelection[existingIndex].isDeselected = true;
-        }
-      } else {
-        updatedSelection = updatedSelection.filter(r => r.ImageSeriesQCCheckId !== row.ImageSeriesQCCheckId);
-      }
-    }
+    const updatedSelection = checked
+      ? [...selectedRows, updatedLocalData[rowIndex]]
+      : selectedRows.filter(
+          (row) => row.ImageSeriesQCCheckId !== updatedLocalData[rowIndex].ImageSeriesQCCheckId
+        );
 
     setLocalData(updatedLocalData);
     setSelectedRows(updatedSelection);
@@ -105,99 +60,80 @@ const ProtocolComplianceQCChecksTable: React.FC<ProtocolComplianceQCChecksProps>
   const handleConditionChange = (rowIndex: number, field: string, value: any) => {
     const updatedData = [...localData];
     updatedData[rowIndex][field] = value;
+
     setLocalData(updatedData);
     onAnyCheckChange();
 
-    const rowId = updatedData[rowIndex].ImageSeriesQCCheckId;
-    const isSelected = selectedRows.some(r => r.ImageSeriesQCCheckId === rowId);
+    // Ensure definedModalityQcCheckId is updated when modifying conditions
+    const updatedSelection = selectedRows.map((row) =>
+      row.ImageSeriesQCCheckId === updatedData[rowIndex].ImageSeriesQCCheckId
+        ? { ...row, [field]: value, definedModalityQcCheckId: updatedData[rowIndex].definedModalityQcCheckId }
+        : row
+    );
+    setSelectedRows(updatedSelection);
+    onSelectionChange?.(updatedSelection);
 
-    if (isSelected) {
-      const updatedSelection = selectedRows.map(r =>
-        r.ImageSeriesQCCheckId === rowId ? { ...r, [field]: value } : r
-      );
-      setSelectedRows(updatedSelection);
-      onSelectionChange?.(updatedSelection);
-    }
-
-    const modifiedIndex = userModifiedData.findIndex(r => r.ImageSeriesQCCheckId === rowId);
-    if (modifiedIndex > -1) {
-      const updatedUserModified = [...userModifiedData];
-      updatedUserModified[modifiedIndex][field] = value;
-      setUserModifiedData(updatedUserModified);
+    // Update modified data with definedModalityQcCheckId
+    const existingIndex = userModifiedData.findIndex(
+      (item) => item.ImageSeriesQCCheckId === updatedData[rowIndex].ImageSeriesQCCheckId
+    );
+    if (existingIndex !== -1) {
+      const updatedModifiedData = [...userModifiedData];
+      updatedModifiedData[existingIndex] = {
+        ...updatedModifiedData[existingIndex],
+        [field]: value,
+        definedModalityQcCheckId: updatedData[rowIndex].definedModalityQcCheckId,
+      };
+      setUserModifiedData(updatedModifiedData);
     } else {
       setUserModifiedData([...userModifiedData, updatedData[rowIndex]]);
     }
   };
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearch(value);
+    const filteredData = localData.filter(
+      (item) =>
+        item.diconTag.toLowerCase().includes(value.toLowerCase()) ||
+        item.name.toLowerCase().includes(value.toLowerCase())
+    );
+    setLocalData(filteredData);
+  };
+
   return (
-    <div className="searchElementContainer">
+    <div>
       <div className="search-box">
         <input
-          className="qc-search-text-box"
           type="text"
           value={search}
-          onChange={onSearchChange}
+          onChange={handleSearchChange}
           placeholder="Search"
+          disabled={isFieldDisabled}
         />
-        {search && (
-          <span
-            data-testid="clear-icon"
-            className="clear-icon"
-            onClick={clearAll}
-            style={{ color: isFieldDisabled ? '#76777a' : '#000' }}
-          >
-            ✕
-          </span>
-        )}
-        <div className="searchFieldStyle">
-          <button
-            title="Search"
-            className="search-btn"
-            disabled={isFieldDisabled}
-            onClick={onSubmitSearch}
-          >
-            <FontAwesomeIcon
-              icon={faMagnifyingGlass}
-              size="sm"
-              style={{ color: isFieldDisabled ? '#76777a' : '#00bfff' }}
-              className="searchIconStyle"
-            />
-          </button>
-        </div>
+        <FontAwesomeIcon icon={faMagnifyingGlass} />
       </div>
 
-      <div style={{ marginTop: '30px', height: '400px', overflow: 'auto' }}>
+      <div style={{ marginTop: 30, maxHeight: '400px', overflow: 'auto' }}>
         <Table className="pc-check-table">
           <thead>
             <tr>
               {columns.map((column, index) => (
-                <th key={index} className={column.Header === 'Check Condition' ? 'custom-expected-values-header' : ''}>
-                  {column.Header === 'Checkbox' ? (
+                <th key={index} className="custom-table-header">
+                  {column.Header}
+                  {column.Header === 'Checkbox' && (
                     <Form.Check
                       type="checkbox"
-                      checked={
-                        selectedRows.length === localData.length && localData.length > 0
-                      }
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        const updatedLocalData = localData.map(row => ({
+                      checked={selectedRows.length === localData.length && localData.length > 0}
+                      onChange={() => {
+                        const newCheckedState = localData.map((row) => ({
                           ...row,
-                          isChecked: checked,
-                          isDeselected: checked ? false : row.isDeselected || false
+                          isChecked: !selectedRows.every((r) => r.ImageSeriesQCCheckId === row.ImageSeriesQCCheckId),
                         }));
-
-                        const updatedSelectedRows = checked
-                          ? updatedLocalData.map(row => ({ ...row, isDeselected: false }))
-                          : [];
-
-                        setLocalData(updatedLocalData);
-                        setSelectedRows(updatedSelectedRows);
-                        onSelectionChange?.(updatedSelectedRows);
-                        onAnyCheckChange();
+                        setLocalData(newCheckedState);
+                        setSelectedRows(newCheckedState.filter((row) => row.isChecked));
                       }}
                     />
-                  ) : (
-                    column.Header
                   )}
                 </th>
               ))}
@@ -213,52 +149,32 @@ const ProtocolComplianceQCChecksTable: React.FC<ProtocolComplianceQCChecksProps>
             ) : (
               localData.map((row, rowIndex) => (
                 <tr key={rowIndex}>
-                  {columns.map((column, colIndex) => (
-                    <td
-                      key={colIndex}
-                      className={
-                        column.Header === 'Check Condition'
-                          ? 'custom-expected-values-cell'
-                          : ''
-                      }
-                    >
-                      {column.accessor === 'dicomTag' || column.accessor === 'name' ? (
-                        <span>{row[column.accessor]}</span>
-                      ) : column.Header === 'Checkbox' ? (
+                  {columns.map((column, columnIndex) => (
+                    <td key={columnIndex} className={column.accessor === 'checkbox' ? 'checkbox-cell' : ''}>
+                      {column.accessor === 'checkbox' ? (
                         <Form.Check
                           type="checkbox"
                           checked={row.isChecked || false}
                           onChange={(e) => handleCheckBoxChange(rowIndex, e.target.checked)}
-                          disabled={isPublished}
                         />
-                      ) : column.Header === 'Check Condition' ? (
+                      ) : column.accessor === 'checkCondition' ? (
                         <Form.Select
-                          className="custom-dropdown"
-                          value={row[column.accessor] || ''}
-                          onChange={(e) =>
-                            handleConditionChange(rowIndex, column.accessor, e.target.value)
-                          }
-                          disabled={!row.isChecked || isPublished}
+                          value={row[column.accessor]}
+                          onChange={(e) => handleConditionChange(rowIndex, column.accessor, e.target.value)}
+                          disabled={row.isChecked || isPublished}
                         >
-                          <option value="">Select option</option>
-                          {checkCondition.map((val) => {
-                            const [key, value] = val.split(':');
-                            return (
-                              <option key={key} value={key}>
-                                {value}
-                              </option>
-                            );
-                          })}
+                          {checkCondition.map((condition, idx) => (
+                            <option key={idx} value={condition}>
+                              {condition}
+                            </option>
+                          ))}
                         </Form.Select>
                       ) : (
                         <Form.Control
                           type="text"
-                          className="custom-textbox"
                           value={row[column.accessor]}
-                          onChange={(e) =>
-                            handleConditionChange(rowIndex, column.accessor, e.target.value)
-                          }
-                          disabled={!row.isChecked || isPublished}
+                          onChange={(e) => handleConditionChange(rowIndex, column.accessor, e.target.value)}
+                          disabled={row.isChecked || isPublished}
                         />
                       )}
                     </td>
