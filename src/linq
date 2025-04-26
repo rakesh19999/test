@@ -28,3 +28,30 @@ var definedModalitiesAndSeriesQuery = from imageQCProtocol in dataQCDbContext.Im
     };
 
 var listImageSeries = await definedModalitiesAndSeriesQuery.ToListAsync(cancellationToken);
+
+
+var groupedList = listImageSeries
+    .GroupBy(x => x.definedModalityID)
+    .Select(g => new ModalityResponse
+    {
+        Id = g.Key,
+        ModalityId = g.FirstOrDefault()?.modalityId,
+        Modality = g.FirstOrDefault()?.definedModalities,
+        Anatomies = g
+            .Where(a => a.anatomyId != null) // Only if anatomy exists
+            .GroupBy(a => a.anatomyId)
+            .Select(ag => new Anatomies
+            {
+                Id = ag.Key.Value,
+                Name = ag.FirstOrDefault()?.anatomyName,
+                ImageSeries = ag
+                    .Where(x => x.definedImageSeriesId != null)
+                    .Select(x => new Models.Response.ImageSeries
+                    {
+                        Id = x.definedImageSeriesId.ToString(),
+                        Name = x.definedImageSeriesName,
+                        numOfSavedQCChecksAtImageSeries = x.numOfSavedQCChecksAtImageSeries
+                    }).ToList() ?? new List<Models.Response.ImageSeries>()
+            }).ToList() ?? new List<Anatomies>() // <-- Always return empty anatomies list if no anatomy
+    }).ToList();
+
