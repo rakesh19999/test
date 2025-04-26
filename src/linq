@@ -55,3 +55,44 @@ var groupedList = listImageSeries
             }).ToList() ?? new List<Anatomies>() // <-- Always return empty anatomies list if no anatomy
     }).ToList();
 
+------------------
+
+var definedModalitiesAndSeriesQuery =
+    from imageQCProtocol in dataQCDbContext.ImageQcProtocols
+    join definedModalityQcProtocol in dataQCDbContext.DefinedModalityQcProtocols 
+        on imageQCProtocol.Id equals definedModalityQcProtocol.ImageQcProtocol
+    join definedModality in dataQCDbContext.DefinedModalities 
+        on definedModalityQcProtocol.DefinedModality equals definedModality.Id
+    join definedModalityAnatomy in dataQCDbContext.DefinedModalityAnatomies 
+        on definedModality.Id equals definedModalityAnatomy.DefinedModality into anatomyGroup
+    from definedModalityAnatomy in anatomyGroup.DefaultIfEmpty()
+
+    join anatomy in dataQCDbContext.Anatomies 
+        on definedModalityAnatomy.Anatomy equals anatomy.Id into anatomyDetailsGroup
+    from anatomy in anatomyDetailsGroup.DefaultIfEmpty()
+
+    join definedImageSeries in dataQCDbContext.DefinedImageSeries
+        on new { DefinedModality = definedModalityAnatomy.DefinedModality, Anatomy = definedModalityAnatomy.Anatomy }
+        equals new { DefinedModality = definedImageSeries.DefinedModality, Anatomy = definedImageSeries.Anatomy } into definedImageSeriesGroup
+    from definedImageSeries in definedImageSeriesGroup.DefaultIfEmpty()
+
+    join defImgSeriesQCProtocol in dataQCDbContext.DefinedImageSeriesQcProtocols 
+        on definedImageSeries.Id equals defImgSeriesQCProtocol.DefinedImageSeries into defImgSeriesQCProtocolGroup
+    from defImgSeriesQCProtocol in defImgSeriesQCProtocolGroup.DefaultIfEmpty()
+
+    join study in dataQCDbContext.Studies 
+        on imageQCProtocol.Study equals study.Id
+
+    where imageQCProtocol.Study == studyId[0]
+
+    select new 
+    {
+        definedModalityID = definedModality.Id,
+        modalityId = definedModality.Modality,
+        definedModalities = definedModality.Name,
+        definedImageSeries = definedImageSeries != null ? definedImageSeries.Name : null,
+        definedImageSeriesId = definedImageSeries != null ? definedImageSeries.Id : (int?)null,
+        anatomyName = anatomy != null ? anatomy.Name : null,
+        anatomyId = anatomy != null ? anatomy.Id : (int?)null,
+        numOfSavedQCChecksAtImageSeries = 10
+    };
