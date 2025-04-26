@@ -4,15 +4,14 @@ var definedModalitiesAndSeriesQuery = from imageQCProtocol in dataQCDbContext.Im
     join definedModality in dataQCDbContext.DefinedModalities 
         on definedModalityQcProtocol.DefinedModality equals definedModality.Id
     join definedModalityAnatomy in dataQCDbContext.DefinedModalityAnatomies 
-        on definedModality.Id equals definedModalityAnatomy.DefinedModality
+        on definedModality.Id equals definedModalityAnatomy.DefinedModality into anatomyGroup
+    from definedModalityAnatomy in anatomyGroup.DefaultIfEmpty() // <-- ALLOW NULL ANATOMY
     join anatomy in dataQCDbContext.Anatomies 
-        on definedModalityAnatomy.Anatomy equals anatomy.Id
+        on definedModalityAnatomy.Anatomy equals anatomy.Id into anatomyDetailGroup
+    from anatomy in anatomyDetailGroup.DefaultIfEmpty() // <-- ALLOW NULL ANATOMY DETAIL
     join definedImageSeries in dataQCDbContext.DefinedImageSeries 
         on definedModalityAnatomy.Id equals definedImageSeries.Anatomy into seriesGroup
-    from definedImageSeries in seriesGroup.DefaultIfEmpty() // <-- important to allow empty
-    join defImgSeriesQcProtocol in dataQCDbContext.DefinedImageSeriesQcProtocols 
-        on definedImageSeries.Id equals defImgSeriesQcProtocol.DefinedImageSeries into imgSeriesQCGroup
-    from defImgSeriesQcProtocol in imgSeriesQCGroup.DefaultIfEmpty()
+    from definedImageSeries in seriesGroup.DefaultIfEmpty() // <-- ALLOW NULL IMAGE SERIES
     join study in dataQCDbContext.Studies 
         on imageQCProtocol.Study equals study.Id
     where imageQCProtocol.Study == studyDbId
@@ -21,37 +20,11 @@ var definedModalitiesAndSeriesQuery = from imageQCProtocol in dataQCDbContext.Im
         definedModalityID = definedModality.Id,
         modalityId = definedModality.Modality,
         definedModalities = definedModality.Name,
-        definedImageSeries = definedImageSeries != null ? definedImageSeries.Name : null,
+        anatomyId = anatomy != null ? anatomy.Id : (int?)null,
+        anatomyName = anatomy != null ? anatomy.Name : null,
         definedImageSeriesId = definedImageSeries != null ? definedImageSeries.Id : (int?)null,
-        anatomyName = anatomy.Name,
-        anatomyId = anatomy.Id,
-        numOfSavedQCChecksAtImageSeries = 10 // Placeholder
+        definedImageSeriesName = definedImageSeries != null ? definedImageSeries.Name : null,
+        numOfSavedQCChecksAtImageSeries = 10
     };
 
-var listImageSeries = await definedModalitiesAndSeriesQuery
-    .OrderBy(x => x.anatomyName)
-    .GroupBy(x => x.anatomyId)
-    .Select(g => g.First())
-    .ToListAsync(cancellationToken);
-
-// Now build Modalities list
-var groupedList = listImageSeries
-    .GroupBy(item => item.definedModalityID)
-    .Select(g => new ModalityResponse
-    {
-        Id = g.Key,
-        ModalityId = g.Select(x => x.modalityId).FirstOrDefault(),
-        Modality = g.Select(x => x.definedModalities).FirstOrDefault(),
-        Anatomies = g.GroupBy(x => x.anatomyId).Select(ag => new Anatomies
-        {
-            Id = ag.Key,
-            Name = ag.Select(x => x.anatomyName).FirstOrDefault(),
-            ImageSeries = ag.Where(x => x.definedImageSeriesId != null)
-                            .Select(x => new Models.Response.ImageSeries
-                            {
-                                Id = x.definedImageSeriesId?.ToString(),
-                                Name = x.definedImageSeries,
-                                numOfSavedQCChecksAtImageSeries = x.numOfSavedQCChecksAtImageSeries
-                            }).ToList() ?? new List<Models.Response.ImageSeries>() // <-- handle empty list
-        }).ToList()
-    }).ToList();
+var listImageSeries = await definedModalitiesAndSeriesQuery.ToListAsync(cancellationToken);
