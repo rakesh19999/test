@@ -1,27 +1,28 @@
-const handleRowCheckChange = (row: any, isChecked: boolean) => {
-  setSelectedChecks((prevSelected) => {
-    const existingRow = prevSelected.find((r) => r.imageSeriesQCCheckId === row.imageSeriesQCCheckId);
-
-    if (isChecked) {
-      if (existingRow) {
-        return prevSelected.map((r) =>
-          r.imageSeriesQCCheckId === row.imageSeriesQCCheckId
-            ? { ...r, isDeselected: false }
-            : r
-        );
-      } else {
-        return [...prevSelected, { ...row, isDeselected: false }];
-      }
-    } else {
-      if (existingRow) {
-        return prevSelected.map((r) =>
-          r.imageSeriesQCCheckId === row.imageSeriesQCCheckId
-            ? { ...r, isDeselected: true, isChecked: false }
-            : r
-        );
-      } else {
-        return [...prevSelected, { ...row, isDeselected: true, isChecked: false }];
-      }
+const resetDicom = async () => {
+  const updatedSelection = selectedRows.map((row) => {
+    if (row.isPreselected) {
+      // If it was preselected earlier — create deselected object
+      return {
+        ...row,
+        isDeselected: true,
+        isChecked: false,
+      };
     }
-  });
+    // If it was newly selected (not preselected), we don't need to keep it
+    return null;
+  }).filter(Boolean); // Remove nulls
+
+  const resetData = PCData.map((item) => ({
+    ...item,
+    isChecked: false,
+    checkbox: false,
+    expectedValue: "",
+    checkCondition: "",
+  }));
+
+  setFilteredData(resetData);
+  setPCData(resetData);
+  setTableKey((prev) => prev + 1);
+
+  setSelectedRows(updatedSelection);
 };
