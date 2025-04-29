@@ -1,0 +1,107 @@
+const handleSave = async () => {
+  if (selectedChecks.length === 0) {
+    toast.error(Constants.selectoneInfo);
+    return;
+  }
+
+  // Validation
+  for (const item of selectedChecks) {
+    const checkCondition = item.checkCondition === "0" ? null : item.checkCondition;
+    const expectedValue = item.expectedValue || '';
+
+    if (!checkCondition && expectedValue) {
+      toast.error(Constants.blankCheckCondition);
+      return;
+    }
+
+    if (checkCondition && !expectedValue) {
+      toast.error(Constants.blankExpectedValue);
+      return;
+    }
+  }
+
+  // Filter out unwanted combinations
+  const filterChecks = selectedChecks.filter(item => {
+    const isPreselectedModalityCheck = item.checkLevel === "Modality";
+    const isPreselectedAnatomyCheck = item.checkLevel === "Anatomy";
+
+    if (
+      (checkLevel === 'Anatomy' && item.isChecked && isPreselectedModalityCheck) ||
+      (checkLevel === 'ImageSeries' && item.isChecked && (isPreselectedModalityCheck || isPreselectedAnatomyCheck))
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  try {
+    const accessToken = await GetAccessToken(instance, inProgress);
+
+    // Get deselected rows (from full local data)
+    const deselectedRows = resetSelectedChecks
+      ?.filter(item => item.definedQcCheckId && !item.isChecked)
+      .map(item => ({
+        ...item,
+        isDeselected: true
+      }));
+
+    // Add isDeselected: false for selected rows
+    const selectedToSave = filterChecks.map(item => ({
+      ...item,
+      isDeselected: false
+    }));
+
+    const finalChecks = [...selectedToSave, ...(deselectedRows || [])];
+
+    const selectedDicomChecks = {
+      checkLevel: checkLevel,
+      definedModalityId: definedModalityId,
+      definedModalityAnatomyId: definedAnatomyId,
+      studyId: studyIdentifier,
+      imageSeriesQcChecks: finalChecks.map(item => ({
+        definedModalityQcCheckId: item?.definedModalityQcCheckId || "",
+        definedAnatomyQcCheckId: item?.definedAnatomyQcCheckId || "",
+        definedTaskQcCheckId: item?.definedTaskQcCheckId || "",
+        imageSeriesQCCheckId: item.imageSeriesQCCheckId,
+        expectedValue: item.expectedValue,
+        checkDescription: item.description,
+        isDeselected: item.isDeselected
+      }))
+    };
+
+    console.log("Final Save Payload:", JSON.stringify(selectedDicomChecks, null, 2));
+
+    const res = await patchStudyDicomQCCheckConfiguration(accessToken, selectedDicomChecks);
+
+    if (!res) {
+      toast.error(Constants.failedInfo);
+      return;
+    }
+
+    toast.success(Constants.savedSuccessInfo);
+    setRibbonMessage(Constants.modalitytevelinfo);
+
+    const newAccessToken = await GetAccessToken(instance, inProgress);
+    const apiResponse: any = await fetchPCCheckList(
+      newAccessToken,
+      checkLevelId,
+      modalityId,
+      studyIdentifier,
+      checkLevel
+    );
+
+    const mergedData = apiResponse.pcCheckList.map((row: any) => {
+      const selectedRow = selectedChecks.find(r => r.imageSeriesQCCheckId === row.imageSeriesQCCheckId);
+      return selectedRow ? { ...row, ...selectedRow } : row;
+    });
+
+    setPCData(mergedData);
+    setFilteredData(mergedData);
+    setConditionList(apiResponse.checkConditionsList);
+
+    onSave(modalityId);
+  } catch (err) {
+    toast.error(Constants.failedInfo);
+  }
+};
