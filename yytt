@@ -1,28 +1,71 @@
-const resetDicom = async () => {
-  const updatedSelection = selectedRows.map((row) => {
-    if (row.isPreselected) {
-      // If it was preselected earlier — create deselected object
+const handleReset = () => {
+  // Check if any Anatomy or ImageSeries are selected
+  const isAnatomyChecked = PCData.some(
+    (item) => item.isChecked && item.checkLevel === "Anatomy"
+  );
+  const isImageSeriesChecked = PCData.some(
+    (item) => item.isChecked && item.checkLevel === "ImageSeries"
+  );
+
+  // Create resetData
+  const resetData = PCData.map((item) => {
+    if (isAnatomyChecked && item.checkLevel === "Modality") {
       return {
-        ...row,
-        isDeselected: true,
+        ...item,
+        isChecked: true,
+        checkbox: true,
+      };
+    } else if (
+      isImageSeriesChecked &&
+      (item.checkLevel === "Modality" || item.checkLevel === "Anatomy")
+    ) {
+      return {
+        ...item,
+        isChecked: true,
+        checkbox: true,
+      };
+    } else {
+      return {
+        ...item,
         isChecked: false,
+        checkbox: false,
+        expectedValue: "",
+        checkCondition: "",
       };
     }
-    // If it was newly selected (not preselected), we don't need to keep it
-    return null;
-  }).filter(Boolean); // Remove nulls
+  });
 
-  const resetData = PCData.map((item) => ({
-    ...item,
-    isChecked: false,
-    checkbox: false,
-    expectedValue: "",
-    checkCondition: "",
-  }));
+  // Now, handle selectedRows updates:
+  const updatedSelectedRows = [];
 
+  // Track deselected old selected items
+  selectedRows.forEach((selectedRow) => {
+    const matchingRow = resetData.find(
+      (row) => row.imageSeriesQCCheckId === selectedRow.imageSeriesQCCheckId
+    );
+
+    if (matchingRow && !matchingRow.isChecked) {
+      // Means it was previously selected but now unselected
+      updatedSelectedRows.push({
+        ...selectedRow,
+        isDeselected: true,
+      });
+    }
+  });
+
+  // Track newly selected items
+  resetData.forEach((row) => {
+    if (row.isChecked) {
+      updatedSelectedRows.push({
+        ...row,
+        isDeselected: false,
+      });
+    }
+  });
+
+  // Now update everything
   setFilteredData(resetData);
-  setPCData(resetData);
-  setTableKey((prev) => prev + 1);
-
-  setSelectedRows(updatedSelection);
+  setPCData(resetData); // If you have PCData in your state
+  setSelectedRows(updatedSelectedRows);
+  setTableKey((prev) => prev + 1); // To re-render table
 };
