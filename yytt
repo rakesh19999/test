@@ -1,71 +1,65 @@
-const handleReset = () => {
-  // Check if any Anatomy or ImageSeries are selected
-  const isAnatomyChecked = PCData.some(
-    (item) => item.isChecked && item.checkLevel === "Anatomy"
-  );
-  const isImageSeriesChecked = PCData.some(
-    (item) => item.isChecked && item.checkLevel === "ImageSeries"
-  );
+<Form.Check
+  type="checkbox"
+  checked={localData[rowIndex]?.isChecked || false}
+  onChange={(e) => {
+    const checked = e.target.checked;
+    const updatedLocalData = [...localData];
+    const row = updatedLocalData[rowIndex];
 
-  // Create resetData
-  const resetData = PCData.map((item) => {
-    if (isAnatomyChecked && item.checkLevel === "Modality") {
-      return {
-        ...item,
-        isChecked: true,
-        checkbox: true,
-      };
-    } else if (
-      isImageSeriesChecked &&
-      (item.checkLevel === "Modality" || item.checkLevel === "Anatomy")
-    ) {
-      return {
-        ...item,
-        isChecked: true,
-        checkbox: true,
-      };
-    } else {
-      return {
-        ...item,
-        isChecked: false,
-        checkbox: false,
-        expectedValue: "",
-        checkCondition: "",
-      };
-    }
-  });
+    // Update isChecked immediately in table
+    updatedLocalData[rowIndex] = {
+      ...row,
+      isChecked: checked,
+    };
+    setLocalData(updatedLocalData);
 
-  // Now, handle selectedRows updates:
-  const updatedSelectedRows = [];
+    // Now, prepare updated selectedRows
+    let updatedSelection = [...selectedRows];
 
-  // Track deselected old selected items
-  selectedRows.forEach((selectedRow) => {
-    const matchingRow = resetData.find(
-      (row) => row.imageSeriesQCCheckId === selectedRow.imageSeriesQCCheckId
+    const alreadyExisting = updatedSelection.find(
+      (r) => r.imageSeriesQCCheckId === row.imageSeriesQCCheckId
     );
 
-    if (matchingRow && !matchingRow.isChecked) {
-      // Means it was previously selected but now unselected
-      updatedSelectedRows.push({
-        ...selectedRow,
-        isDeselected: true,
-      });
+    if (checked) {
+      // If checkbox checked
+      if (alreadyExisting) {
+        alreadyExisting.isDeselected = false;
+      } else {
+        updatedSelection.push({
+          ...row,
+          isDeselected: false,
+        });
+      }
+    } else {
+      // If checkbox unchecked
+      if (alreadyExisting) {
+        if (row.isPreSelected) {
+          // If it was a pre-selected row, mark it as deselected
+          alreadyExisting.isDeselected = true;
+          alreadyExisting.isChecked = false;
+        } else {
+          // If it was a newly selected row, remove it
+          updatedSelection = updatedSelection.filter(
+            (r) => r.imageSeriesQCCheckId !== row.imageSeriesQCCheckId
+          );
+        }
+      } else {
+        if (row.isPreSelected) {
+          updatedSelection.push({
+            ...row,
+            isDeselected: true,
+            isChecked: false,
+          });
+        }
+      }
     }
-  });
 
-  // Track newly selected items
-  resetData.forEach((row) => {
-    if (row.isChecked) {
-      updatedSelectedRows.push({
-        ...row,
-        isDeselected: false,
-      });
-    }
-  });
+    // Set updated selectedRows
+    setSelectedRows(updatedSelection);
 
-  // Now update everything
-  setFilteredData(resetData);
-  setPCData(resetData); // If you have PCData in your state
-  setSelectedRows(updatedSelectedRows);
-  setTableKey((prev) => prev + 1); // To re-render table
-};
+    // Optional if you need to call
+    onSelectionChange?.(updatedSelection);
+    onAnyCheckChange?.();
+  }}
+  disabled={isPublished}
+/>
