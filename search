@@ -1,0 +1,31 @@
+const handleClearSearch = () => {
+  const mergedData = data.map((row) => {
+    const modified = userModifiedData.find(
+      (r) => r.imageSeriesQCCheckId === row.imageSeriesQCCheckId
+    );
+    return modified ?? row;
+  });
+
+  const selected = mergedData.filter((row) => row.isChecked || row.isDeselected);
+
+  setLocalData(mergedData);
+  setSelectedRows(selected);
+  onSelectionChange?.(selected);
+};
+const updateUserModifiedData = (updatedRows) => {
+  const newUserModified = [...userModifiedData];
+
+  updatedRows.forEach((row) => {
+    const index = newUserModified.findIndex(
+      (r) => r.imageSeriesQCCheckId === row.imageSeriesQCCheckId
+    );
+
+    if (index !== -1) {
+      newUserModified[index] = row;
+    } else {
+      newUserModified.push(row);
+    }
+  });
+
+  setUserModifiedData(newUserModified);
+};
