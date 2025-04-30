@@ -1,0 +1,35 @@
+<Form.Check
+  type="checkbox"
+  checked={localData.length > 0 && localData.every((row) => row.isChecked)}
+  onChange={(e) => {
+    const checked = e.target.checked;
+
+    const updatedLocalData = localData.map((row) => {
+      const isPreselected = row.isChecked || row.definedQcCheckId;
+
+      return {
+        ...row,
+        isChecked: checked,
+        isDeselected: !checked && isPreselected ? true : false,
+        checkCondition: checked ? row.checkCondition : "",
+        expectedValue: checked ? row.expectedValue : "",
+      };
+    });
+
+    const updatedSelectedRows = checked
+      ? updatedLocalData.map((row) => ({ ...row, isDeselected: false }))
+      : updatedLocalData
+          .filter((row) => row.definedQcCheckId || row.isDeselected)
+          .map((row) => ({
+            ...row,
+            isDeselected: row.definedQcCheckId ? true : false,
+          }));
+
+    setLocalData(updatedLocalData);
+    updatedData?.(updatedLocalData);
+    setSelectedRows(updatedSelectedRows);
+    onSelectionChange?.(updatedSelectedRows);
+    onAnyCheckChange?.();
+  }}
+  disabled={isPublished}
+/>
