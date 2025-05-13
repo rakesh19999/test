@@ -1,51 +1,98 @@
-import axios from "axios";
-import { fetchPCCheckList } from "../services/ProtocolComplianceService";
+// ProtocolComplianceQCChecks.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import ProtocolComplianceQCChecks from '../ProtocolComplianceQCChecks';
+import { ToastContainer } from 'react-toastify';
 
-jest.mock("axios");
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+jest.mock('../../services/StudyService', () => ({
+  fetchPCChecklist: jest.fn().mockResolvedValue({
+    pcCheckList: [
+      {
+        imageSeriesQCCheckId: 1,
+        name: 'Test Check',
+        dicomTag: '0010,0010',
+        isEditable: true,
+        isChecked: false,
+        isSelected: false,
+        checkCondition: '',
+        expectedValue: '',
+        description: 'Test Description',
+      }
+    ],
+    checkConditionsList: ['Condition A', 'Condition B']
+  }),
+  patchStudyDicomQCCheckConfiguration: jest.fn().mockResolvedValue(true),
+}));
 
-describe("fetchPCCheckList", () => {
+jest.mock('../../common/AccessToken', () => ({
+  GetAccessToken: jest.fn().mockResolvedValue('mocked_token')
+}));
+
+jest.mock('@azure/msal-react', () => ({
+  useMsal: () => ({
+    instance: {},
+    inProgress: 'none',
+  }),
+}));
+
+const defaultProps = {
+  title: "QC Checks",
+  id: "123",
+  show: true,
+  handleClose: jest.fn(),
+  modalityId: "mod1",
+  studyId: 101,
+  listKeyFunc: jest.fn(),
+  refreshkey: 1,
+  studyIdentifier: "StudyX",
+  definedModalityId: "mod1",
+  checkLevel: "Modality",
+  status: "Draft",
+  onsave: jest.fn(),
+  definedAnatomyId: "anat1",
+  definedImageSeriesId: "img1"
+};
+
+describe('ProtocolComplianceQCChecks', () => {
   beforeEach(() => {
-    global.fetch = jest.fn()
-      .mockResolvedValueOnce({
-        json: jest.fn().mockResolvedValue({ DATA_QC_HOST: "http://host.com" }),
-      } as Response)
-      .mockResolvedValueOnce({
-        json: jest.fn().mockResolvedValue({
-          DATA_QC_API_URL: "http://api.com",
-        }),
-      } as Response);
-  });
-
-  it("returns data on success", async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: { results: [] } });
-
-    const data = await fetchPCCheckList(
-      "token123",
-      "cl1",
-      "mod1",
-      123,
-      "Image"
-    );
-
-    expect(data).toEqual({ results: [] });
-
-    expect(mockedAxios.get).toHaveBeenCalledWith(
-      "http://api.com/GetProtocolComplianceQCCheckList?modalityId=mod1&checkLevelId=cl1&studyId=123&checkLevel=Image",
-      { headers: { Authorization: "Bearer token123" } }
+    render(
+      <>
+        <ProtocolComplianceQCChecks {...defaultProps} />
+        <ToastContainer />
+      </>
     );
   });
 
-  it("logs and returns nothing when no access token", async () => {
-    const result = await fetchPCCheckList("", "cl1", "mod1", 123, "Image");
-    expect(result).toBeUndefined();
+  it('renders modal with title', async () => {
+    expect(await screen.findByText(/Protocol compliance/i)).toBeInTheDocument();
+    expect(screen.getByText(defaultProps.title)).toBeInTheDocument();
   });
 
-  it("throws an error on axios failure", async () => {
-    mockedAxios.get.mockRejectedValueOnce(new Error("Network Error"));
+  it('updates search input', async () => {
+    const input = await screen.findByPlaceholderText(/Search/i);
+    fireEvent.change(input, { target: { value: 'Check' } });
+    expect(input).toHaveValue('Check');
+  });
 
-    await expect(
-      fetchPCCheckList("token123", "cl1", "mod1", 123, "Image")
-    ).rejects.toThrow("Network Error");
+  it('clears search input when clear icon is clicked', async () => {
+    const input = await screen.findByPlaceholderText(/Search/i);
+    fireEvent.change(input, { target: { value: 'Check' } });
+    const clearButton = screen.getByTestId('clear-icon-dator');
+    fireEvent.click(clearButton);
+    expect(input).toHaveValue('');
+  });
+
+  it('shows toast error when save is clicked with no selection', async () => {
+    const saveButton = screen.getByText(/Save/i);
+    fireEvent.click(saveButton);
+    await waitFor(() =>
+      expect(screen.getByText(/Please select at least one/i)).toBeInTheDocument()
+    );
+  });
+
+  it('calls handleClose when close button is clicked', async () => {
+    const closeBtn = await screen.findByTestId('close-popup');
+    fireEvent.click(closeBtn);
+    expect(defaultProps.handleClose).toHaveBeenCalled();
   });
 });
