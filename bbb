@@ -1,52 +1,40 @@
-// QCFormBasicDetails.test.tsx
-import React from "react";
-import { render, screen } from "@testing-library/react";
-import { QCFormBasicDetails } from "./QCFormBasicDetails"; // adjust path as needed
+import { fetchStudyData } from "./YourFile"; // adjust path
+import axios from "axios";
 
-// Mock OverlayToggle component if it's from an external library
-jest.mock("@cip-portal/cip-shared-ui-lib", () => ({
-  OverlayToggle: ({ value, children }: { value: string; children: React.ReactNode }) => (
-    <div data-testid={`overlay-${value}`}>{children}</div>
-  ),
-}));
+jest.mock("axios");
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-describe("QCFormBasicDetails - qcTaskStatus logic", () => {
-  it("renders correct icon for 'new' task status", () => {
-    const props = {
-      qcformBasicDetails: [["taskStatus", "new"]],
-      qcFormData: {},
-      helpfulLinksQC: [],
-    };
+describe("fetchStudyData", () => {
+  beforeEach(() => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        json: async () => ({ DATA_QC_HOST: "http://localhost:3000" }),
+      } as Response)
+      .mockResolvedValueOnce({
+        json: async () => ({ DATA_QC_API_URL: "http://api.test.com" }),
+      } as Response);
 
-    render(<QCFormBasicDetails {...props} />);
-    const statusDiv = screen.getByTestId("overlay-new").querySelector("#new");
-
-    expect(statusDiv).toBeInTheDocument();
-    expect(statusDiv).toHaveClass("img-qc-new-status");
+    mockedAxios.get.mockResolvedValue({ data: { studyName: "TestStudy" } });
   });
 
-  it("renders correct icon for 'in progress' task status", () => {
-    const props = {
-      qcformBasicDetails: [["taskStatus", "in progress"]],
-      qcFormData: {},
-      helpfulLinksQC: [],
-    };
+  it("fetches study data successfully", async () => {
+    const result = await fetchStudyData("test-token", "123");
 
-    render(<QCFormBasicDetails {...props} />);
-    const statusDiv = screen.getByTestId("overlay-in progress").querySelector("#inprogress");
-
-    expect(statusDiv).toBeInTheDocument();
-    expect(statusDiv).toHaveClass("img-qc-inprogress-status");
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "http://api.test.com/studyconfig/123",
+      {
+        headers: {
+          Authorization: "Bearer test-token",
+        },
+      }
+    );
+    expect(result).toEqual({ studyName: "TestStudy" });
   });
 
-  it("renders fallback span for unknown status", () => {
-    const props = {
-      qcformBasicDetails: [["taskStatus", "random"]],
-      qcFormData: {},
-      helpfulLinksQC: [],
-    };
-
-    render(<QCFormBasicDetails {...props} />);
-    expect(screen.getByText("random")).toBeInTheDocument();
+  it("handles fetch or axios failure", async () => {
+    mockedAxios.get.mockRejectedValue(new Error("Network error"));
+    const result = await fetchStudyData("test-token", "123");
+    expect(result).toBeUndefined(); // since the catch block has no return
   });
 });
