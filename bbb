@@ -1,98 +1,117 @@
-// ProtocolComplianceQCChecks.test.tsx
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ProtocolComplianceQCChecks from '../ProtocolComplianceQCChecks';
-import { ToastContainer } from 'react-toastify';
+import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
+import * as api from 'services/api'; // mock this
 
-jest.mock('../../services/StudyService', () => ({
-  fetchPCChecklist: jest.fn().mockResolvedValue({
-    pcCheckList: [
-      {
-        imageSeriesQCCheckId: 1,
-        name: 'Test Check',
-        dicomTag: '0010,0010',
-        isEditable: true,
-        isChecked: false,
-        isSelected: false,
-        checkCondition: '',
-        expectedValue: '',
-        description: 'Test Description',
-      }
-    ],
-    checkConditionsList: ['Condition A', 'Condition B']
-  }),
-  patchStudyDicomQCCheckConfiguration: jest.fn().mockResolvedValue(true),
-}));
+jest.mock('services/api');
 
-jest.mock('../../common/AccessToken', () => ({
-  GetAccessToken: jest.fn().mockResolvedValue('mocked_token')
-}));
-
-jest.mock('@azure/msal-react', () => ({
-  useMsal: () => ({
-    instance: {},
-    inProgress: 'none',
-  }),
-}));
-
-const defaultProps = {
-  title: "QC Checks",
-  id: "123",
-  show: true,
-  handleClose: jest.fn(),
-  modalityId: "mod1",
-  studyId: 101,
-  listKeyFunc: jest.fn(),
-  refreshkey: 1,
-  studyIdentifier: "StudyX",
-  definedModalityId: "mod1",
-  checkLevel: "Modality",
-  status: "Draft",
-  onsave: jest.fn(),
-  definedAnatomyId: "anat1",
-  definedImageSeriesId: "img1"
-};
+const mockData = [
+  {
+    qcChecklistId: 1,
+    qcCheckName: 'Check A',
+    condition: 'Equals',
+  },
+  {
+    qcChecklistId: 2,
+    qcCheckName: 'Check B',
+    condition: 'Contains',
+  },
+];
 
 describe('ProtocolComplianceQCChecks', () => {
+  const setup = (overrides = {}) => {
+    const props = {
+      showModal: true,
+      onClose: jest.fn(),
+      selectedQcCheckIds: [1],
+      studyId: 1,
+      modality: 'CT',
+      definedModalityQcCheckId: 10,
+      setDefinedModalityQcCheckId: jest.fn(),
+      ...overrides,
+    };
+
+    render(<ProtocolComplianceQCChecks {...props} />);
+    return props;
+  };
+
   beforeEach(() => {
-    render(
-      <>
-        <ProtocolComplianceQCChecks {...defaultProps} />
-        <ToastContainer />
-      </>
-    );
+    jest.clearAllMocks();
   });
 
-  it('renders modal with title', async () => {
-    expect(await screen.findByText(/Protocol compliance/i)).toBeInTheDocument();
-    expect(screen.getByText(defaultProps.title)).toBeInTheDocument();
+  it('should fetch QC checklist on mount', async () => {
+    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+
+    setup();
+
+    await waitFor(() => {
+      expect(api.getQCChecklist).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText('Check A')).toBeInTheDocument();
+    expect(screen.getByText('Check B')).toBeInTheDocument();
   });
 
-  it('updates search input', async () => {
-    const input = await screen.findByPlaceholderText(/Search/i);
-    fireEvent.change(input, { target: { value: 'Check' } });
-    expect(input).toHaveValue('Check');
+  it('should handle checkbox change', async () => {
+    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+    setup();
+
+    const checkbox = await screen.findByLabelText('Check B');
+    fireEvent.click(checkbox);
+
+    expect(checkbox).toBeChecked();
   });
 
-  it('clears search input when clear icon is clicked', async () => {
-    const input = await screen.findByPlaceholderText(/Search/i);
-    fireEvent.change(input, { target: { value: 'Check' } });
-    const clearButton = screen.getByTestId('clear-icon-dator');
-    fireEvent.click(clearButton);
-    expect(input).toHaveValue('');
+  it('should handle condition change', async () => {
+    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+    setup();
+
+    const dropdown = await screen.findByTestId('condition-select-1');
+    fireEvent.change(dropdown, { target: { value: 'NotEquals' } });
+
+    expect(dropdown).toHaveValue('NotEquals');
   });
 
-  it('shows toast error when save is clicked with no selection', async () => {
-    const saveButton = screen.getByText(/Save/i);
+  it('should call handleSave and update definedModalityQcCheckId', async () => {
+    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+    (api.saveQCChecks as jest.Mock).mockResolvedValue({ definedModalityQcCheckId: 99 });
+
+    const setDefinedModalityQcCheckId = jest.fn();
+    const onClose = jest.fn();
+
+    setup({ setDefinedModalityQcCheckId, onClose });
+
+    const saveButton = await screen.findByText('Save');
     fireEvent.click(saveButton);
-    await waitFor(() =>
-      expect(screen.getByText(/Please select at least one/i)).toBeInTheDocument()
-    );
+
+    await waitFor(() => {
+      expect(api.saveQCChecks).toHaveBeenCalled();
+      expect(setDefinedModalityQcCheckId).toHaveBeenCalledWith(99);
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
-  it('calls handleClose when close button is clicked', async () => {
-    const closeBtn = await screen.findByTestId('close-popup');
-    fireEvent.click(closeBtn);
-    expect(defaultProps.handleClose).toHaveBeenCalled();
+  it('should handle reset', async () => {
+    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+    setup();
+
+    const checkbox = await screen.findByLabelText('Check A');
+    fireEvent.click(checkbox);
+
+    const resetButton = screen.getByText('Reset');
+    fireEvent.click(resetButton);
+
+    // After reset, checkbox should be in original state
+    expect(checkbox).not.toBeChecked(); // assuming Check A was initially unchecked
+  });
+
+  it('should close modal on cancel', async () => {
+    const onClose = jest.fn();
+    setup({ onClose });
+
+    const cancelButton = screen.getByText('Cancel');
+    fireEvent.click(cancelButton);
+
+    expect(onClose).toHaveBeenCalled();
   });
 });
