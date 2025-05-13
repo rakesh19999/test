@@ -1,40 +1,51 @@
-import { fetchStudyData } from "./YourFile"; // adjust path
 import axios from "axios";
+import { fetchPCCheckList } from "../services/ProtocolComplianceService";
 
 jest.mock("axios");
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
-describe("fetchStudyData", () => {
+describe("fetchPCCheckList", () => {
   beforeEach(() => {
     global.fetch = jest.fn()
       .mockResolvedValueOnce({
-        json: async () => ({ DATA_QC_HOST: "http://localhost:3000" }),
+        json: jest.fn().mockResolvedValue({ DATA_QC_HOST: "http://host.com" }),
       } as Response)
       .mockResolvedValueOnce({
-        json: async () => ({ DATA_QC_API_URL: "http://api.test.com" }),
+        json: jest.fn().mockResolvedValue({
+          DATA_QC_API_URL: "http://api.com",
+        }),
       } as Response);
-
-    mockedAxios.get.mockResolvedValue({ data: { studyName: "TestStudy" } });
   });
 
-  it("fetches study data successfully", async () => {
-    const result = await fetchStudyData("test-token", "123");
+  it("returns data on success", async () => {
+    mockedAxios.get.mockResolvedValueOnce({ data: { results: [] } });
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(mockedAxios.get).toHaveBeenCalledWith(
-      "http://api.test.com/studyconfig/123",
-      {
-        headers: {
-          Authorization: "Bearer test-token",
-        },
-      }
+    const data = await fetchPCCheckList(
+      "token123",
+      "cl1",
+      "mod1",
+      123,
+      "Image"
     );
-    expect(result).toEqual({ studyName: "TestStudy" });
+
+    expect(data).toEqual({ results: [] });
+
+    expect(mockedAxios.get).toHaveBeenCalledWith(
+      "http://api.com/GetProtocolComplianceQCCheckList?modalityId=mod1&checkLevelId=cl1&studyId=123&checkLevel=Image",
+      { headers: { Authorization: "Bearer token123" } }
+    );
   });
 
-  it("handles fetch or axios failure", async () => {
-    mockedAxios.get.mockRejectedValue(new Error("Network error"));
-    const result = await fetchStudyData("test-token", "123");
-    expect(result).toBeUndefined(); // since the catch block has no return
+  it("logs and returns nothing when no access token", async () => {
+    const result = await fetchPCCheckList("", "cl1", "mod1", 123, "Image");
+    expect(result).toBeUndefined();
+  });
+
+  it("throws an error on axios failure", async () => {
+    mockedAxios.get.mockRejectedValueOnce(new Error("Network Error"));
+
+    await expect(
+      fetchPCCheckList("token123", "cl1", "mod1", 123, "Image")
+    ).rejects.toThrow("Network Error");
   });
 });
