@@ -1,0 +1,52 @@
+import { GetAccessToken } from "./GetAccessToken";
+import { InteractionRequiredAuthError, InteractionStatus } from "@azure/msal-browser";
+import * as ConfigService from "../services/ConfigService";
+
+jest.mock("../services/ConfigService");
+
+describe("GetAccessToken", () => {
+  const mockInstance = {
+    getActiveAccount: jest.fn(),
+    acquireTokenSilent: jest.fn(),
+    acquireTokenPopup: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    ConfigService.getConfig.mockResolvedValue({ DATA_QC_HOST: "http://test-host" });
+    ConfigService.getDataQCConfig.mockResolvedValue({ SCOPE: "api://test-scope" });
+  });
+
+  it("should return access token using silent flow", async () => {
+    mockInstance.getActiveAccount.mockReturnValue({ username: "test" });
+    mockInstance.acquireTokenSilent.mockResolvedValue({ accessToken: "silent-token" });
+
+    const token = await GetAccessToken(mockInstance, InteractionStatus.None);
+    expect(token).toBe("silent-token");
+  });
+
+  it("should use popup when silent token fails with InteractionRequiredAuthError", async () => {
+    mockInstance.getActiveAccount.mockReturnValue({ username: "test" });
+    mockInstance.acquireTokenSilent.mockRejectedValue(new InteractionRequiredAuthError());
+    mockInstance.acquireTokenPopup.mockResolvedValue({ accessToken: "popup-token" });
+
+    const token = await GetAccessToken(mockInstance, InteractionStatus.None);
+    expect(token).toBe("popup-token");
+  });
+
+  it("should return undefined if no active account or in progress", async () => {
+    mockInstance.getActiveAccount.mockReturnValue(null);
+    const token = await GetAccessToken(mockInstance, InteractionStatus.None);
+    expect(token).toBeUndefined();
+  });
+
+  it("should log and return undefined on unknown error", async () => {
+    console.error = jest.fn();
+    mockInstance.getActiveAccount.mockReturnValue({ username: "test" });
+    mockInstance.acquireTokenSilent.mockRejectedValue(new Error("Generic Error"));
+
+    const token = await GetAccessToken(mockInstance, InteractionStatus.None);
+    expect(console.error).toHaveBeenCalledWith("Error calling the API:", expect.any(Error));
+    expect(token).toBeUndefined();
+  });
+});
