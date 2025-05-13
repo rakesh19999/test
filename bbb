@@ -1,117 +1,93 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
-import * as api from 'services/api'; // mock this
+import { render, screen, act, waitFor } from '@testing-library/react';
+import { SiteComments } from './SiteComments'; // Adjust the import as necessary
+import { Constants } from "../../common/constants";
 
-jest.mock('services/api');
+// Mock the image series data
+const mockImageSeries = {
+  imageseries: [
+    {
+      patientComments: "Comment 1",
+      seriesInstanceUID: "123"
+    },
+    {
+      patientComments: "Comment 2",
+      seriesInstanceUID: "456"
+    }
+  ]
+};
 
-const mockData = [
-  {
-    qcChecklistId: 1,
-    qcCheckName: 'Check A',
-    condition: 'Equals',
-  },
-  {
-    qcChecklistId: 2,
-    qcCheckName: 'Check B',
-    condition: 'Contains',
-  },
-];
+const mockImgSeries = {
+  imageseries: [
+    {
+      patientComments: "Test comment",
+      seriesInstanceUID: "789"
+    }
+  ]
+};
 
-describe('ProtocolComplianceQCChecks', () => {
-  const setup = (overrides = {}) => {
-    const props = {
-      showModal: true,
-      onClose: jest.fn(),
-      selectedQcCheckIds: [1],
-      studyId: 1,
-      modality: 'CT',
-      definedModalityQcCheckId: 10,
-      setDefinedModalityQcCheckId: jest.fn(),
-      ...overrides,
+describe('SiteComments Component', () => {
+  test('should render SiteComments component correctly', async () => {
+    render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
+    
+    // Check if the Accordion header is rendered
+    expect(screen.getByText('Site Comments')).toBeInTheDocument();
+  });
+
+  test('should display correct patient comments when imgSeries changes', async () => {
+    const { rerender } = render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
+    
+    // Initially check for the default state
+    expect(screen.getByRole('textbox').value).toBe(Constants.nositeCommentsFound);
+
+    // Change imgSeries
+    const newImgSeries = {
+      imageseries: [
+        {
+          patientComments: "Updated Test comment",
+          seriesInstanceUID: "789"
+        }
+      ]
     };
-
-    render(<ProtocolComplianceQCChecks {...props} />);
-    return props;
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
+    rerender(<SiteComments imgSeries={newImgSeries} ingSeries={mockImageSeries} />);
+    
+    // Wait for the component to update
+    await waitFor(() => expect(screen.getByRole('textbox').value).toBe("Updated Test comment"));
   });
 
-  it('should fetch QC checklist on mount', async () => {
-    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
+  test('should display multiple comments correctly when comments differ', async () => {
+    const { rerender } = render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
+    
+    const newImgSeries = {
+      imageseries: [
+        {
+          patientComments: "Updated comment 1",
+          seriesInstanceUID: "789"
+        },
+        {
+          patientComments: "Updated comment 2",
+          seriesInstanceUID: "101"
+        }
+      ]
+    };
+    rerender(<SiteComments imgSeries={newImgSeries} ingSeries={mockImageSeries} />);
+    
+    await waitFor(() => expect(screen.getByRole('textbox').value).toBe("Updated comment 1\nUpdated comment 2"));
+  });
 
-    setup();
-
-    await waitFor(() => {
-      expect(api.getQCChecklist).toHaveBeenCalled();
+  test('should call callback function when provided', async () => {
+    const callbackMock = jest.fn();
+    
+    render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} callbackFunc={callbackMock} />);
+    
+    // Check that the callback function is not called initially
+    expect(callbackMock).not.toHaveBeenCalled();
+    
+    // Simulate any action that triggers callback
+    act(() => {
+      // Add the trigger for the callback here if any
     });
 
-    expect(screen.getByText('Check A')).toBeInTheDocument();
-    expect(screen.getByText('Check B')).toBeInTheDocument();
-  });
-
-  it('should handle checkbox change', async () => {
-    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
-    setup();
-
-    const checkbox = await screen.findByLabelText('Check B');
-    fireEvent.click(checkbox);
-
-    expect(checkbox).toBeChecked();
-  });
-
-  it('should handle condition change', async () => {
-    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
-    setup();
-
-    const dropdown = await screen.findByTestId('condition-select-1');
-    fireEvent.change(dropdown, { target: { value: 'NotEquals' } });
-
-    expect(dropdown).toHaveValue('NotEquals');
-  });
-
-  it('should call handleSave and update definedModalityQcCheckId', async () => {
-    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
-    (api.saveQCChecks as jest.Mock).mockResolvedValue({ definedModalityQcCheckId: 99 });
-
-    const setDefinedModalityQcCheckId = jest.fn();
-    const onClose = jest.fn();
-
-    setup({ setDefinedModalityQcCheckId, onClose });
-
-    const saveButton = await screen.findByText('Save');
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      expect(api.saveQCChecks).toHaveBeenCalled();
-      expect(setDefinedModalityQcCheckId).toHaveBeenCalledWith(99);
-      expect(onClose).toHaveBeenCalled();
-    });
-  });
-
-  it('should handle reset', async () => {
-    (api.getQCChecklist as jest.Mock).mockResolvedValue(mockData);
-    setup();
-
-    const checkbox = await screen.findByLabelText('Check A');
-    fireEvent.click(checkbox);
-
-    const resetButton = screen.getByText('Reset');
-    fireEvent.click(resetButton);
-
-    // After reset, checkbox should be in original state
-    expect(checkbox).not.toBeChecked(); // assuming Check A was initially unchecked
-  });
-
-  it('should close modal on cancel', async () => {
-    const onClose = jest.fn();
-    setup({ onClose });
-
-    const cancelButton = screen.getByText('Cancel');
-    fireEvent.click(cancelButton);
-
-    expect(onClose).toHaveBeenCalled();
+    // Ensure the callback function is called
+    expect(callbackMock).toHaveBeenCalledTimes(1);
   });
 });
