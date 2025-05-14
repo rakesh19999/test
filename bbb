@@ -1,136 +1,111 @@
-import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { ImageProtocol } from "../ImageProtocol";
-import * as msalReact from "@azure/msal-react";
-import * as StudyService from "../../../services/StudyService";
-import { Constants } from "../../../common/constants";
+// ProtocolComplianceQCChecks.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
+import { useMsal } from '@azure/msal-react';
+import * as api from '../../services/api';
+import * as tokenUtil from '../../common/AccessToken';
 
-// Mock useMsal
-jest.mock("@azure/msal-react", () => ({
-  useMsal: () => ({
-    instance: {},
-    inProgress: "none"
-  })
+// Mock MSAL
+jest.mock('@azure/msal-react', () => ({
+  useMsal: jest.fn(),
 }));
 
-// Mock service
-jest.mock("../../../services/StudyService", () => ({
-  fetchStudyData: jest.fn()
-}));
+// Mock API modules
+jest.mock('../../services/api');
+jest.mock('../../common/AccessToken');
 
-const mockStudyConfigData = {
-  studyIdentifier: "study-123",
-  modalities: [
-    {
-      id: 1,
-      modality: "CT",
-      tat: 12,
-      expeditedTat: 6,
-      definedModalityId: "mod1"
-    }
-  ],
-  savedChecks: [
-    {
-      id: 1,
-      checkLevel: "modality",
-      count: 3
-    }
-  ]
-};
+describe('ProtocolComplianceQCChecks', () => {
+  const mockHandleClose = jest.fn();
+  const mockOnSave = jest.fn();
 
-const mockStudyConfigToSave = {
-  modalities: []
-};
-
-describe("ImageProtocol Component", () => {
-  const callbackfn = jest.fn();
+  const defaultProps = {
+    title: 'QC Checks',
+    id: 'test',
+    show: true,
+    handleClose: mockHandleClose,
+    modalityId: 'modality123',
+    studyId: 456,
+    listKeyFunc: jest.fn(),
+    refreshKey: 0,
+    studyIdentifier: 'study123',
+    definedModalityId: 'mod123',
+    definedAnatomyId: 'anat456',
+    definedImageSeriesId: 'img789',
+    checkLevel: 'Modality',
+    status: 'Active',
+    onSave: mockOnSave,
+  };
 
   beforeEach(() => {
+    (useMsal as jest.Mock).mockReturnValue({
+      instance: {},
+      inProgress: 'none',
+    });
+
+    (tokenUtil.GetAccessToken as jest.Mock).mockResolvedValue('mockToken');
+
+    (api.fetchPCCheckList as jest.Mock).mockResolvedValue({
+      pcCheckList: [
+        { id: 1, dicomTag: '0010,0010', name: 'Patient Name' },
+        { id: 2, dicomTag: '0010,0020', name: 'Patient ID' },
+      ],
+      checkConditionsList: ['Equals', 'Contains'],
+    });
+  });
+
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
-  test("renders modality information", () => {
-    render(
-      <ImageProtocol
-        studyConfigData={mockStudyConfigData}
-        callbackfn={callbackfn}
-        studyConfigToSave={mockStudyConfigToSave}
-      />
-    );
+  it('renders modal with title and fetches QC check list', async () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
 
-    expect(screen.getByText("Study Modalities")).toBeInTheDocument();
-    expect(screen.getByText("CT")).toBeInTheDocument();
-    expect(screen.getByText("TAT:")).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("Expedited TAT:")).toBeInTheDocument();
-    expect(screen.getByText("6")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument(); // savedChecks count
-  });
-
-  test("opens ProtocolComplianceQCChecks modal on + icon click", async () => {
-    render(
-      <ImageProtocol
-        studyConfigData={mockStudyConfigData}
-        callbackfn={callbackfn}
-        studyConfigToSave={mockStudyConfigToSave}
-      />
-    );
-
-    const plusIcon = screen.getByRole("img"); // FontAwesomeIcon renders as <svg role="img">
-    fireEvent.click(plusIcon);
+    expect(screen.getByText('QC Checks')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("CT")).toBeInTheDocument(); // modal title
+      expect(api.fetchPCCheckList).toHaveBeenCalledWith(
+        'mockToken',
+        'mod123', // from checkLevel = 'Modality'
+        'modality123',
+        456,
+        'Modality'
+      );
     });
   });
 
-  test("fetchStudyData called on handleClose", async () => {
-    const mockFetch = jest.spyOn(StudyService, "fetchStudyData").mockResolvedValueOnce({
-      modalities: [],
-      savedChecks: []
-    });
+  it('calls handleClose when Cancel is clicked', () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    const cancelBtn = screen.getByText('Cancel');
+    fireEvent.click(cancelBtn);
+    expect(mockHandleClose).toHaveBeenCalled();
+  });
 
-    render(
-      <ImageProtocol
-        studyConfigData={mockStudyConfigData}
-        callbackfn={callbackfn}
-        studyConfigToSave={mockStudyConfigToSave}
-      />
-    );
+  it('filters results on Search click', async () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    await screen.findByText('Patient Name');
 
-    const plusIcon = screen.getByRole("img");
-    fireEvent.click(plusIcon);
+    const searchInput = screen.getByPlaceholderText('Search...');
+    fireEvent.change(searchInput, { target: { value: 'Patient ID' } });
+
+    const searchBtn = screen.getByRole('button', { name: /search/i });
+    fireEvent.click(searchBtn);
 
     await waitFor(() => {
-      expect(screen.getByText("CT")).toBeInTheDocument();
-    });
-
-    const closeButton = screen.getByText("CT"); // simulate closing by triggering handleClose
-    fireEvent.click(closeButton); // ideally you'd have a modal close button to target
-
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalled();
+      expect(screen.queryByText('Patient Name')).not.toBeInTheDocument();
+      expect(screen.getByText('Patient ID')).toBeInTheDocument();
     });
   });
 
-  test("toggles Accordion correctly", () => {
-    render(
-      <ImageProtocol
-        studyConfigData={mockStudyConfigData}
-        callbackfn={callbackfn}
-        studyConfigToSave={mockStudyConfigToSave}
-      />
-    );
+  it('clears search on Clear click', async () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    await screen.findByText('Patient Name');
 
-    const header = screen.getByText("CT");
-    fireEvent.click(header);
+    const clearBtn = screen.getByText('Clear');
+    fireEvent.click(clearBtn);
 
-    // Accordion opens (Body should be visible)
-    expect(screen.getByText("TAT:")).toBeInTheDocument();
-
-    fireEvent.click(header);
-
-    // Accordion collapses (Body disappears)
-    expect(screen.queryByText("TAT:")).toBeInTheDocument(); // Accordion body still exists due to Bootstrap collapsing behavior
+    expect(screen.getByPlaceholderText('Search...')).toHaveValue('');
   });
+
+  // Add test for handleSave once implemented
 });
