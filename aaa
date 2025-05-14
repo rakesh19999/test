@@ -1,0 +1,79 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import Search from './Search';
+
+describe('Search Component', () => {
+  const mockSetSearchCriteriaData = jest.fn();
+  const mockListKeyFunc = jest.fn();
+
+  beforeEach(() => {
+    mockSetSearchCriteriaData.mockClear();
+    mockListKeyFunc.mockClear();
+  });
+
+  it('renders input and button', () => {
+    render(
+      <Search
+        setSearchCriteriaData={mockSetSearchCriteriaData}
+        listKeyFunc={mockListKeyFunc}
+        refreshKey={0}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('Search')).toBeInTheDocument();
+    expect(screen.getByTitle('search')).toBeDisabled(); // Initially disabled
+  });
+
+  it('enables search button when input is not empty', () => {
+    render(
+      <Search
+        setSearchCriteriaData={mockSetSearchCriteriaData}
+        listKeyFunc={mockListKeyFunc}
+        refreshKey={0}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Search');
+    fireEvent.change(input, { target: { value: 'test' } });
+
+    expect(screen.getByTitle('search')).not.toBeDisabled();
+  });
+
+  it('clears the input and disables button on clear', () => {
+    render(
+      <Search
+        setSearchCriteriaData={mockSetSearchCriteriaData}
+        listKeyFunc={mockListKeyFunc}
+        refreshKey={0}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Search');
+    fireEvent.change(input, { target: { value: 'something' } });
+
+    const clearIcon = screen.getByText('×');
+    fireEvent.click(clearIcon);
+
+    expect(input).toHaveValue('');
+    expect(screen.getByTitle('search')).toBeDisabled();
+  });
+
+  it('calls setSearchCriteriaData and listKeyFunc on search', () => {
+    render(
+      <Search
+        setSearchCriteriaData={mockSetSearchCriteriaData}
+        listKeyFunc={mockListKeyFunc}
+        refreshKey={2}
+      />
+    );
+
+    const input = screen.getByPlaceholderText('Search');
+    fireEvent.change(input, { target: { value: 'data' } });
+
+    const searchBtn = screen.getByTitle('search');
+    fireEvent.click(searchBtn);
+
+    expect(mockSetSearchCriteriaData).toHaveBeenCalled();
+    expect(mockListKeyFunc).toHaveBeenCalledWith(3);
+  });
+});
