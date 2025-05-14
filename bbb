@@ -1,58 +1,72 @@
-import { render, waitFor } from '@testing-library/react';
-import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
-import { fetchPCCheckList } from 'services/api';
-import { GetAccessToken } from 'utils/token';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import QCFormSubmit from '../QCFormSubmit';
 
-describe('ProtocolComplianceQCChecks - InvokeQCCheckListApi', () => {
-  const mockApiResponse = {
-    pcCheckList: [{ id: 1, name: 'QC 1' }],
-    checkConditionsList: ['Condition A', 'Condition B'],
+describe('QCFormSubmit Component', () => {
+  const defaultProps = {
+    isChecked: false,
+    handleCheckboxChange: jest.fn(),
+    isReadOnly: false,
+    qcstatus: '',
+    closeButton: jest.fn(),
+    handleSaveButtonClick: jest.fn(),
+    handleQCStatusButtonClick: jest.fn(),
+    taskId: '123',
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  it('renders checkbox and handles change', () => {
+    render(<QCFormSubmit {...defaultProps} />);
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeInTheDocument();
+    fireEvent.click(checkbox);
+    expect(defaultProps.handleCheckboxChange).toHaveBeenCalled();
   });
 
-  it('should call fetchPCCheckList, set data and handle loading state', async () => {
-    (GetAccessToken as jest.Mock).mockResolvedValue('fake-token');
-    (fetchPCCheckList as jest.Mock).mockResolvedValue(mockApiResponse);
-
-    const { getByText } = render(
-      <ProtocolComplianceQCChecks isOpen={true} onClose={() => {}} />
-    );
-
-    // Wait for checklist data to render
-    await waitFor(() => {
-      expect(getByText('QC 1')).toBeInTheDocument();
-    });
-
-    expect(GetAccessToken).toHaveBeenCalled();
-    expect(fetchPCCheckList).toHaveBeenCalledWith(
-      'fake-token',
-      expect.any(String), // checkLevelId
-      expect.any(String), // modalityId
-      expect.any(String), // studyId
-      expect.any(String)  // checkLevel
-    );
+  it('disables checkbox if taskId is missing or isReadOnly is true', () => {
+    render(<QCFormSubmit {...defaultProps} taskId={''} isReadOnly={true} />);
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeDisabled();
   });
 
-  it('should handle API error and still stop loading', async () => {
-    (GetAccessToken as jest.Mock).mockResolvedValue('fake-token');
-    (fetchPCCheckList as jest.Mock).mockRejectedValue(new Error('API Error'));
+  it('calls closeButton on Cancel click', () => {
+    render(<QCFormSubmit {...defaultProps} />);
+    const cancelBtn = screen.getByText(/cancel/i);
+    fireEvent.click(cancelBtn);
+    expect(defaultProps.closeButton).toHaveBeenCalled();
+  });
 
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  it('renders Save button and handles click', () => {
+    render(<QCFormSubmit {...defaultProps} qcstatus="something" />);
+    const saveBtn = screen.getByText(/save/i);
+    expect(saveBtn).toBeInTheDocument();
+    fireEvent.click(saveBtn);
+    expect(defaultProps.handleSaveButtonClick).toHaveBeenCalledWith('123');
+  });
 
-    render(<ProtocolComplianceQCChecks isOpen={true} onClose={() => {}} />);
+  it('renders QC Not Required button and handles click', () => {
+    render(<QCFormSubmit {...defaultProps} qcstatus="qc not required" />);
+    const notReqBtn = screen.getByText(/qc not required/i);
+    fireEvent.click(notReqBtn);
+    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 2);
+  });
 
-    await waitFor(() => {
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Error fetching Protocol Compliance Check Per Modality List',
-        expect.any(Error)
-      );
-    });
+  it('renders QC Failed button and handles click', () => {
+    render(<QCFormSubmit {...defaultProps} qcstatus="qc failed" />);
+    const failedBtn = screen.getByText(/qc failed/i);
+    fireEvent.click(failedBtn);
+    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 0);
+  });
 
-    expect(GetAccessToken).toHaveBeenCalled();
-    expect(fetchPCCheckList).toHaveBeenCalled();
-    consoleErrorSpy.mockRestore();
+  it('renders QC Passed button and handles click', () => {
+    render(<QCFormSubmit {...defaultProps} qcstatus="qc passed" />);
+    const passedBtn = screen.getByText(/qc passed/i);
+    fireEvent.click(passedBtn);
+    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 1);
+  });
+
+  it('disables all QC buttons when isReadOnly is true or isChecked is true', () => {
+    render(<QCFormSubmit {...defaultProps} isReadOnly={true} isChecked={true} qcstatus="qc passed" />);
+    const passedBtn = screen.getByText(/qc passed/i);
+    expect(passedBtn).toBeDisabled();
   });
 });
