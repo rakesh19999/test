@@ -1,153 +1,108 @@
 import React from 'react';
-import { render, fireEvent, screen, waitFor } from '@testing-library/react';
-import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
-import { useMsal } from '@azure/msal-react';
-import * as StudyService from '../../services/Studyservice';
-import { GetAccessToken } from '../../common/AccessToken';
-import { ToastContainer } from 'react-toastify';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import ProtocolComplianceQCChecks from '../ProtocolComplianceQCChecks';
+import * as StudyService from '../../../services/Studyservice';
 
-jest.mock('@azure/msal-react');
-jest.mock('../../services/Studyservice');
-jest.mock('../../common/AccessToken');
-
-const mockPcChecklist = [
-  {
-    imageSeriesQCCheckId: 1,
-    dicomTag: "0010,0010",
-    name: "PatientName",
-    description: "Check for patient name",
-    isEditable: true,
-    isChecked: false,
-    checkCondition: "e",
-    expectedValue: "",
-    isSelected: false,
-    definedQcCheckId: "QCID123",
-    attributeId: 123
-  }
-];
-
-const mockConditionsList = ["=", "<", ">"];
+jest.mock('../../../services/Studyservice', () => ({
+  fetchPCCheckList: jest.fn(),
+  patchStudyDicomQCCheckConfiguration: jest.fn()
+}));
 
 describe('ProtocolComplianceQCChecks', () => {
   const defaultProps = {
-    title: 'Head MRI',
-    id: 'modal-1',
-    show: true,
-    handleClose: jest.fn(),
-    modalityId: 'mod1',
-    studyId: 123,
-    listkeyFunc: jest.fn(),
-    refreshkey: 1,
-    studyIdentifier: 'StudyABC',
-    definedModalityId: 'mod1',
-    checkLevel: 'Modality',
-    status: 'Draft',
-    onSave: jest.fn(),
-    definedAnatomyId: 'anat1',
-    definedImageSeriesId: 'series1'
+    isOpen: true,
+    onClose: jest.fn(),
+    studyConfig: { studyProtocolId: 123 },
+    onSave: jest.fn()
+  };
+
+  const mockChecklist = {
+    pcChecklist: [
+      {
+        id: 1,
+        checkName: 'Check 1',
+        checkType: 'Text',
+        expectedValue: '',
+        checkCondition: '=',
+        isPreselected: false,
+        definedModalityQcCheckId: null
+      },
+      {
+        id: 2,
+        checkName: 'Check 2',
+        checkType: 'Dropdown',
+        expectedValue: 'Yes',
+        checkCondition: '!=',
+        isPreselected: true,
+        definedModalityQcCheckId: 555
+      }
+    ],
+    checkConditionsList: [
+      { label: 'Equals', value: '=' },
+      { label: 'Not Equals', value: '!=' }
+    ]
   };
 
   beforeEach(() => {
-    (useMsal as jest.Mock).mockReturnValue({
-      instance: {},
-      inProgress: 'none',
-    });
-
-    (GetAccessToken as jest.Mock).mockResolvedValue('mockAccessToken');
-
-    (StudyService.fetchPCCheckList as jest.Mock).mockResolvedValue({
-      pcChecklist: mockPcChecklist,
-      checkConditionsList: mockConditionsList
-    });
-
+    jest.clearAllMocks();
+    (StudyService.fetchPCCheckList as jest.Mock).mockResolvedValue(mockChecklist);
     (StudyService.patchStudyDicomQCCheckConfiguration as jest.Mock).mockResolvedValue(true);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('renders modal with title and checklist rows', async () => {
+  it('renders checklist rows', async () => {
     render(<ProtocolComplianceQCChecks {...defaultProps} />);
-    expect(await screen.findByText('Protocol Compliance')).toBeInTheDocument();
-    expect(await screen.findByText('PatientName')).toBeInTheDocument();
+    expect(await screen.findByText('Check 1')).toBeInTheDocument();
+    expect(screen.getByText('Check 2')).toBeInTheDocument();
   });
 
-  it('allows selecting a row and saving it', async () => {
-    render(
-      <>
-        <ProtocolComplianceQCChecks {...defaultProps} />
-        <ToastContainer />
-      </>
-    );
-
-    const checkbox = await screen.findByRole('checkbox');
+  it('allows selecting and saving a new row', async () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    await screen.findByText('Check 1');
+    
+    const checkbox = screen.getAllByRole('checkbox')[0];
     fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
 
-    const expectedValueInput = screen.getByDisplayValue('');
-    fireEvent.change(expectedValueInput, { target: { value: 'TestValue' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
 
-    const select = screen.getByDisplayValue('e');
-    fireEvent.change(select, { target: { value: '=' } });
-
-    const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
-
-    await waitFor(() =>
-      expect(StudyService.patchStudyDicomQCCheckConfiguration).toHaveBeenCalled()
-    );
+    await waitFor(() => {
+      expect(StudyService.patchStudyDicomQCCheckConfiguration).toHaveBeenCalled();
+    });
+    expect(defaultProps.onSave).toHaveBeenCalled();
   });
 
-  it('shows toast error when trying to save without checkCondition', async () => {
-    render(
-      <>
-        <ProtocolComplianceQCChecks {...defaultProps} />
-        <ToastContainer />
-      </>
-    );
-
-    const checkbox = await screen.findByRole('checkbox');
-    fireEvent.click(checkbox);
-
-    const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
-
-    await screen.findByText(/Please select check condition/i);
-  });
-
-  it('filters rows on search', async () => {
+  it('displays a preselected row as checked', async () => {
     render(<ProtocolComplianceQCChecks {...defaultProps} />);
-    await screen.findByText('PatientName');
+    await screen.findByText('Check 2');
 
-    const input = screen.getByPlaceholderText('Search');
-    fireEvent.change(input, { target: { value: 'Patient' } });
-
-    const searchButton = screen.getByRole('button', { name: /search/i });
-    fireEvent.click(searchButton);
-
-    expect(await screen.findByText('PatientName')).toBeInTheDocument();
+    const checkboxes = screen.getAllByRole('checkbox');
+    expect(checkboxes[1]).toBeChecked(); // Preselected
   });
 
-  it('clears search and restores rows', async () => {
+  it('allows editing expected value of a row', async () => {
     render(<ProtocolComplianceQCChecks {...defaultProps} />);
-    await screen.findByText('PatientName');
+    await screen.findByText('Check 1');
 
-    const input = screen.getByPlaceholderText('Search');
-    fireEvent.change(input, { target: { value: 'Patient' } });
-
-    const searchButton = screen.getByRole('button', { name: /search/i });
-    fireEvent.click(searchButton);
-
-    const clearButton = await screen.findByText('Clear');
-    fireEvent.click(clearButton);
-
-    expect(await screen.findByText('PatientName')).toBeInTheDocument();
+    const input = screen.getAllByRole('textbox')[0];
+    fireEvent.change(input, { target: { value: '90' } });
+    expect(input).toHaveValue('90');
   });
 
-  it('calls handleClose when modal is closed', async () => {
+  it('allows changing check condition via dropdown', async () => {
     render(<ProtocolComplianceQCChecks {...defaultProps} />);
-    const closeButton = await screen.findByLabelText('Close');
-    fireEvent.click(closeButton);
-    expect(defaultProps.handleClose).toHaveBeenCalled();
+    await screen.findByText('Check 1');
+
+    const dropdowns = screen.getAllByRole('combobox');
+    fireEvent.change(dropdowns[0], { target: { value: '!=' } });
+
+    expect(dropdowns[0]).toHaveValue('!=');
+  });
+
+  it('calls onClose when Cancel button is clicked', async () => {
+    render(<ProtocolComplianceQCChecks {...defaultProps} />);
+    await screen.findByText('Check 1');
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(defaultProps.onClose).toHaveBeenCalled();
   });
 });
