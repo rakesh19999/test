@@ -1,72 +1,79 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import QCFormSubmit from '../QCFormSubmit';
+import { render, fireEvent, screen } from '@testing-library/react';
+import QCFormSubmit from '../QCFormSubmit'; // adjust the import path as needed
+import '@testing-library/jest-dom';
 
-describe('QCFormSubmit Component', () => {
-  const defaultProps = {
+describe('QCFormSubmit', () => {
+  const baseProps = {
     isChecked: false,
-    handleCheckboxChange: jest.fn(),
     isReadOnly: false,
     qcstatus: '',
+    taskId: '123',
     closeButton: jest.fn(),
     handleSaveButtonClick: jest.fn(),
+    handleCheckboxChange: jest.fn(),
     handleQCStatusButtonClick: jest.fn(),
-    taskId: '123',
   };
 
-  it('renders checkbox and handles change', () => {
-    render(<QCFormSubmit {...defaultProps} />);
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders checkbox and triggers change handler', () => {
+    render(<QCFormSubmit {...baseProps} />);
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toBeInTheDocument();
+
     fireEvent.click(checkbox);
-    expect(defaultProps.handleCheckboxChange).toHaveBeenCalled();
+    expect(baseProps.handleCheckboxChange).toHaveBeenCalled();
   });
 
-  it('disables checkbox if taskId is missing or isReadOnly is true', () => {
-    render(<QCFormSubmit {...defaultProps} taskId={''} isReadOnly={true} />);
-    const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toBeDisabled();
+  it('disables all actions when isReadOnly is true', () => {
+    render(<QCFormSubmit {...baseProps} isReadOnly={true} />);
+    expect(screen.getByRole('checkbox')).toBeDisabled();
   });
 
-  it('calls closeButton on Cancel click', () => {
-    render(<QCFormSubmit {...defaultProps} />);
-    const cancelBtn = screen.getByText(/cancel/i);
-    fireEvent.click(cancelBtn);
-    expect(defaultProps.closeButton).toHaveBeenCalled();
+  it('calls closeButton when Cancel is clicked', () => {
+    render(<QCFormSubmit {...baseProps} />);
+    fireEvent.click(screen.getByText(/cancel/i));
+    expect(baseProps.closeButton).toHaveBeenCalled();
   });
 
-  it('renders Save button and handles click', () => {
-    render(<QCFormSubmit {...defaultProps} qcstatus="something" />);
+  it('renders Save button and triggers handleSaveButtonClick', () => {
+    render(<QCFormSubmit {...baseProps} qcstatus="anything" />);
     const saveBtn = screen.getByText(/save/i);
     expect(saveBtn).toBeInTheDocument();
     fireEvent.click(saveBtn);
-    expect(defaultProps.handleSaveButtonClick).toHaveBeenCalledWith('123');
+    expect(baseProps.handleSaveButtonClick).toHaveBeenCalledWith('123');
   });
 
-  it('renders QC Not Required button and handles click', () => {
-    render(<QCFormSubmit {...defaultProps} qcstatus="qc not required" />);
-    const notReqBtn = screen.getByText(/qc not required/i);
-    fireEvent.click(notReqBtn);
-    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 2);
+  it('renders QC Not Required button and triggers handler', () => {
+    render(<QCFormSubmit {...baseProps} qcstatus="qc not required" />);
+    const notRequiredBtn = screen.getByText(/qc not required/i);
+    expect(notRequiredBtn).toBeInTheDocument();
+    fireEvent.click(notRequiredBtn);
+    expect(baseProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 2);
   });
 
-  it('renders QC Failed button and handles click', () => {
-    render(<QCFormSubmit {...defaultProps} qcstatus="qc failed" />);
+  it('renders QC Failed button and triggers handler', () => {
+    render(<QCFormSubmit {...baseProps} qcstatus="qc failed" />);
     const failedBtn = screen.getByText(/qc failed/i);
+    expect(failedBtn).toBeInTheDocument();
     fireEvent.click(failedBtn);
-    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 0);
+    expect(baseProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 0);
   });
 
-  it('renders QC Passed button and handles click', () => {
-    render(<QCFormSubmit {...defaultProps} qcstatus="qc passed" />);
+  it('renders QC Passed button and triggers handler', () => {
+    render(<QCFormSubmit {...baseProps} qcstatus="qc passed" />);
     const passedBtn = screen.getByText(/qc passed/i);
+    expect(passedBtn).toBeInTheDocument();
     fireEvent.click(passedBtn);
-    expect(defaultProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 1);
+    expect(baseProps.handleQCStatusButtonClick).toHaveBeenCalledWith('123', 1);
   });
 
-  it('disables all QC buttons when isReadOnly is true or isChecked is true', () => {
-    render(<QCFormSubmit {...defaultProps} isReadOnly={true} isChecked={true} qcstatus="qc passed" />);
-    const passedBtn = screen.getByText(/qc passed/i);
-    expect(passedBtn).toBeDisabled();
+  it('disables QC buttons when isChecked is true', () => {
+    render(<QCFormSubmit {...baseProps} isChecked={true} qcstatus="qc failed" />);
+    const failedBtn = screen.getByText(/qc failed/i);
+    expect(failedBtn).toBeDisabled();
   });
 });
