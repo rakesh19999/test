@@ -1,93 +1,58 @@
-import { render, screen, act, waitFor } from '@testing-library/react';
-import { SiteComments } from './SiteComments'; // Adjust the import as necessary
-import { Constants } from "../../common/constants";
+import { render, waitFor } from '@testing-library/react';
+import ProtocolComplianceQCChecks from './ProtocolComplianceQCChecks';
+import { fetchPCCheckList } from 'services/api';
+import { GetAccessToken } from 'utils/token';
 
-// Mock the image series data
-const mockImageSeries = {
-  imageseries: [
-    {
-      patientComments: "Comment 1",
-      seriesInstanceUID: "123"
-    },
-    {
-      patientComments: "Comment 2",
-      seriesInstanceUID: "456"
-    }
-  ]
-};
+describe('ProtocolComplianceQCChecks - InvokeQCCheckListApi', () => {
+  const mockApiResponse = {
+    pcCheckList: [{ id: 1, name: 'QC 1' }],
+    checkConditionsList: ['Condition A', 'Condition B'],
+  };
 
-const mockImgSeries = {
-  imageseries: [
-    {
-      patientComments: "Test comment",
-      seriesInstanceUID: "789"
-    }
-  ]
-};
-
-describe('SiteComments Component', () => {
-  test('should render SiteComments component correctly', async () => {
-    render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
-    
-    // Check if the Accordion header is rendered
-    expect(screen.getByText('Site Comments')).toBeInTheDocument();
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  test('should display correct patient comments when imgSeries changes', async () => {
-    const { rerender } = render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
-    
-    // Initially check for the default state
-    expect(screen.getByRole('textbox').value).toBe(Constants.nositeCommentsFound);
+  it('should call fetchPCCheckList, set data and handle loading state', async () => {
+    (GetAccessToken as jest.Mock).mockResolvedValue('fake-token');
+    (fetchPCCheckList as jest.Mock).mockResolvedValue(mockApiResponse);
 
-    // Change imgSeries
-    const newImgSeries = {
-      imageseries: [
-        {
-          patientComments: "Updated Test comment",
-          seriesInstanceUID: "789"
-        }
-      ]
-    };
-    rerender(<SiteComments imgSeries={newImgSeries} ingSeries={mockImageSeries} />);
-    
-    // Wait for the component to update
-    await waitFor(() => expect(screen.getByRole('textbox').value).toBe("Updated Test comment"));
-  });
+    const { getByText } = render(
+      <ProtocolComplianceQCChecks isOpen={true} onClose={() => {}} />
+    );
 
-  test('should display multiple comments correctly when comments differ', async () => {
-    const { rerender } = render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} />);
-    
-    const newImgSeries = {
-      imageseries: [
-        {
-          patientComments: "Updated comment 1",
-          seriesInstanceUID: "789"
-        },
-        {
-          patientComments: "Updated comment 2",
-          seriesInstanceUID: "101"
-        }
-      ]
-    };
-    rerender(<SiteComments imgSeries={newImgSeries} ingSeries={mockImageSeries} />);
-    
-    await waitFor(() => expect(screen.getByRole('textbox').value).toBe("Updated comment 1\nUpdated comment 2"));
-  });
-
-  test('should call callback function when provided', async () => {
-    const callbackMock = jest.fn();
-    
-    render(<SiteComments imgSeries={mockImgSeries} ingSeries={mockImageSeries} callbackFunc={callbackMock} />);
-    
-    // Check that the callback function is not called initially
-    expect(callbackMock).not.toHaveBeenCalled();
-    
-    // Simulate any action that triggers callback
-    act(() => {
-      // Add the trigger for the callback here if any
+    // Wait for checklist data to render
+    await waitFor(() => {
+      expect(getByText('QC 1')).toBeInTheDocument();
     });
 
-    // Ensure the callback function is called
-    expect(callbackMock).toHaveBeenCalledTimes(1);
+    expect(GetAccessToken).toHaveBeenCalled();
+    expect(fetchPCCheckList).toHaveBeenCalledWith(
+      'fake-token',
+      expect.any(String), // checkLevelId
+      expect.any(String), // modalityId
+      expect.any(String), // studyId
+      expect.any(String)  // checkLevel
+    );
+  });
+
+  it('should handle API error and still stop loading', async () => {
+    (GetAccessToken as jest.Mock).mockResolvedValue('fake-token');
+    (fetchPCCheckList as jest.Mock).mockRejectedValue(new Error('API Error'));
+
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    render(<ProtocolComplianceQCChecks isOpen={true} onClose={() => {}} />);
+
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error fetching Protocol Compliance Check Per Modality List',
+        expect.any(Error)
+      );
+    });
+
+    expect(GetAccessToken).toHaveBeenCalled();
+    expect(fetchPCCheckList).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });
