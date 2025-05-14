@@ -108,4 +108,78 @@ describe('ProtocolComplianceQCChecks', () => {
   });
 
   // Add test for handleSave once implemented
+it('selects a row checkbox', async () => {
+  render(<ProtocolComplianceQCChecks {...defaultProps} />);
+  await screen.findByText('Patient Name');
+
+  const checkbox = screen.getAllByRole('checkbox')[1]; // Skip header checkbox
+  fireEvent.click(checkbox);
+
+  expect(checkbox).toBeChecked();
+});
+
+it('edits a condition dropdown value', async () => {
+  render(<ProtocolComplianceQCChecks {...defaultProps} />);
+  await screen.findByText('Patient Name');
+
+  const selectDropdown = screen.getAllByRole('combobox')[0];
+  fireEvent.change(selectDropdown, { target: { value: 'Contains' } });
+
+  expect(selectDropdown).toHaveValue('Contains');
+});
+
+it('calls onSave and closes modal on Save', async () => {
+  (api.patchStudyDicomQCCheckConfiguration as jest.Mock).mockResolvedValue({});
+
+  render(<ProtocolComplianceQCChecks {...defaultProps} />);
+  await screen.findByText('Patient Name');
+
+  const checkbox = screen.getAllByRole('checkbox')[1];
+  fireEvent.click(checkbox);
+
+  const saveBtn = screen.getByText('Save');
+  fireEvent.click(saveBtn);
+
+  await waitFor(() => {
+    expect(api.patchStudyDicomQCCheckConfiguration).toHaveBeenCalled();
+    expect(mockOnSave).toHaveBeenCalled();
+    expect(mockHandleClose).toHaveBeenCalled();
+  });
+});
+
+it('handles fetchPCCheckList API error gracefully', async () => {
+  (api.fetchPCCheckList as jest.Mock).mockRejectedValue(new Error('Failed to fetch'));
+
+  render(<ProtocolComplianceQCChecks {...defaultProps} />);
+
+  await waitFor(() => {
+    expect(screen.queryByText('Patient Name')).not.toBeInTheDocument();
+  });
+});
+
+it('does not save preselected checks again', async () => {
+  (api.fetchPCCheckList as jest.Mock).mockResolvedValue({
+    pcCheckList: [
+      {
+        id: 1,
+        dicomTag: '0010,0010',
+        name: 'Patient Name',
+        selected: true, // Assume already selected
+      },
+    ],
+    checkConditionsList: ['Equals'],
+  });
+
+  render(<ProtocolComplianceQCChecks {...defaultProps} />);
+  await screen.findByText('Patient Name');
+
+  const saveBtn = screen.getByText('Save');
+  fireEvent.click(saveBtn);
+
+  await waitFor(() => {
+    expect(api.patchStudyDicomQCCheckConfiguration).not.toHaveBeenCalled(); // no change
+    expect(mockOnSave).toHaveBeenCalled();
+  });
+});
+
 });
