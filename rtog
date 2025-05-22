@@ -1,0 +1,165 @@
+import { getAnatomyReceivedColor, getModalityReceivedColor } from "./yourModule";
+import { Constants } from "../../common/constants";
+import { RequiredStatus } from "../../enums/DataQcEnums";
+
+describe("getAnatomyReceivedColor", () => {
+  const mockToggleState = (series: any[], color: string, isToggleEnable = true) => {
+    const state: any = {};
+    series.forEach(s => {
+      state[s.id] = { color, isToggleEnable };
+    });
+    return state;
+  };
+
+  test("should return Default when required and all required green and some gray", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Required,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Required },
+        { id: 2, definedImageSeriesRequiredStatus: RequiredStatus.Required },
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Passed },
+      2: { isToggleEnable: true, color: Constants.Default }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Default);
+  });
+
+  test("should return Failed when required and not all required green", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Required,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Required },
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: false, color: Constants.Failed }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Failed);
+  });
+
+  test("should return Passed when required and all green", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Required,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Required }
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Passed }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Passed);
+  });
+
+  test("should return Failed for optional when all optional orange", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Optional,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Optional },
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: false, color: Constants.Failed }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Failed);
+  });
+
+  test("should return Passed for optional when all optional green", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Optional,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Optional },
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Passed }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Passed);
+  });
+
+  test("should return Default for optional with mix of gray and green", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: RequiredStatus.Optional,
+      imageSeries: [
+        { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Optional }
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Default }
+    };
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Default);
+  });
+
+  test("should return Default if unknown status", () => {
+    const anatomy = {
+      definedModalityAnatomyRequiredStatus: "Unknown",
+      imageSeries: []
+    };
+    const togglestate = {};
+    expect(getAnatomyReceivedColor(anatomy, togglestate)).toBe(Constants.Default);
+  });
+});
+
+describe("getModalityReceivedColor", () => {
+  test("should return Default if any anatomy is gray", () => {
+    const modality = {
+      anatomies: [
+        {
+          definedModalityAnatomyRequiredStatus: RequiredStatus.Required,
+          imageSeries: [
+            { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Required }
+          ]
+        }
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Default }
+    };
+
+    expect(getModalityReceivedColor(modality, togglestate)).toBe(Constants.Default);
+  });
+
+  test("should return Failed if no required anatomies", () => {
+    const modality = {
+      anatomies: [
+        {
+          definedModalityAnatomyRequiredStatus: RequiredStatus.Optional,
+          imageSeries: [
+            { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Optional }
+          ]
+        }
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Passed }
+    };
+
+    expect(getModalityReceivedColor(modality, togglestate)).toBe(Constants.Failed);
+  });
+
+  test("should return Passed if all required and optional anatomies are green", () => {
+    const modality = {
+      anatomies: [
+        {
+          definedModalityAnatomyRequiredStatus: RequiredStatus.Required,
+          imageSeries: [
+            { id: 1, definedImageSeriesRequiredStatus: RequiredStatus.Required }
+          ]
+        },
+        {
+          definedModalityAnatomyRequiredStatus: RequiredStatus.Optional,
+          imageSeries: [
+            { id: 2, definedImageSeriesRequiredStatus: RequiredStatus.Optional }
+          ]
+        }
+      ]
+    };
+    const togglestate = {
+      1: { isToggleEnable: true, color: Constants.Passed },
+      2: { isToggleEnable: true, color: Constants.Passed }
+    };
+
+    expect(getModalityReceivedColor(modality, togglestate)).toBe(Constants.Passed);
+  });
+});
