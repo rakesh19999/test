@@ -1,0 +1,59 @@
+const initialstate = {
+  Authreducer: {
+    user: {
+      roles: [
+        {
+          permissions: [
+            "QC_TASK_VIEW",
+            "QC_TASK_MANAGE",
+            "QC_TASK_SELF_MANAGE"
+          ]
+        }
+      ],
+      accessToken: "Bearer Test",
+    }
+  },
+  modalityReducer: {
+    modalityList: [
+      {
+        id: 1,
+        name: "CT",
+        anatomies: [
+          {
+            id: 101,
+            name: "Chest",
+            definedModalityRequiredStatus: 1,
+          }
+        ],
+      }
+    ],
+    togglestate: true
+  }
+};
+test("render data error", async () => {
+  const mockError = new Error("Failed to fetch data");
+
+  const mockQCfetchData = fetchQCFormData as jest.Mock;
+  mockQCfetchData.mockRejectedValueOnce(mockError);
+
+  const consoleErrorSpy = jest
+    .spyOn(console, "error")
+    .mockImplementation(() => {});
+
+  const store = mockStore(initialstate);
+
+  render(
+    <Provider store={store}>
+      <QCFormDetails />
+    </Provider>
+  );
+
+  await waitFor(() => {
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Error fetching QC Form Data",
+      mockError
+    );
+  });
+
+  consoleErrorSpy.mockRestore();
+});
