@@ -1,33 +1,70 @@
-if (!string.IsNullOrEmpty(getStudiesList.SortColumn))
+var reqCol = getStudiesList.SortColumn?.ToLower();
+var sortOrder = getStudiesList.SortOrder?.ToLower();
+
+if (!string.IsNullOrEmpty(reqCol))
 {
-    var sortColumn = getStudiesList.SortColumn?.ToLower();
-    var sortOrder = getStudiesList.SortOrder?.ToLower();
-
-    mergedList = sortColumn switch
+    var colMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
-        "lastupdatedby" => sortOrder == "asc"
-            ? mergedList
-                .OrderBy(s => s.ModifiedBy == null ? 1 : 0)  // nulls last
-                .ThenBy(s => s.ModifiedBy)
-                .ToList()
-            : mergedList
-                .OrderBy(s => s.ModifiedBy == null ? 1 : 0)
-                .ThenByDescending(s => s.ModifiedBy)
-                .ToList(),
-
-        "lastpublishedby" => sortOrder == "asc"
-            ? mergedList
-                .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
-                .ThenBy(s => s.StatusName == "Published" ? s.ModifiedBy : null)
-                .ToList()
-            : mergedList
-                .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
-                .ThenByDescending(s => s.StatusName == "Published" ? s.ModifiedBy : null)
-                .ToList(),
-
-        _ => {
-            // fallback logic using reflection as needed
-            return mergedList;
-        }
+        { "lastupdatedby", "ModifiedBy" },
+        { "lastupdateddate", "ModifiedDatetime" },
+        { "lastpublishedby", "ModifiedBy" },         // we’ll handle conditionally
+        { "lastpublisheddate", "ModifiedDatetime" }, // we’ll handle conditionally
+        { "studyid", "StudyId" },
+        { "sponsorname", "SponsorName" },
+        { "statusname", "StatusName" },
+        // add more if needed
     };
+
+    if (colMap.TryGetValue(reqCol, out var actualProperty))
+    {
+        if (reqCol == "lastpublishedby")
+        {
+            mergedList = sortOrder == "asc"
+                ? mergedList
+                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
+                    .ThenBy(s => s.StatusName == "Published" ? s.ModifiedBy : null)
+                    .ToList()
+                : mergedList
+                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
+                    .ThenByDescending(s => s.StatusName == "Published" ? s.ModifiedBy : null)
+                    .ToList();
+        }
+        else if (reqCol == "lastpublisheddate")
+        {
+            mergedList = sortOrder == "asc"
+                ? mergedList
+                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedDatetime != null ? 0 : 1)
+                    .ThenBy(s => s.StatusName == "Published" ? s.ModifiedDatetime : null)
+                    .ToList()
+                : mergedList
+                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedDatetime != null ? 0 : 1)
+                    .ThenByDescending(s => s.StatusName == "Published" ? s.ModifiedDatetime : null)
+                    .ToList();
+        }
+        else
+        {
+            // General case — reflect and sort with nulls last
+            var propertyInfo = typeof(StudyDto).GetProperty(actualProperty);
+            if (propertyInfo != null)
+            {
+                mergedList = sortOrder == "asc"
+                    ? mergedList
+                        .OrderBy(s => propertyInfo.GetValue(s) == null ? 1 : 0)
+                        .ThenBy(s => propertyInfo.GetValue(s))
+                        .ToList()
+                    : mergedList
+                        .OrderBy(s => propertyInfo.GetValue(s) == null ? 1 : 0)
+                        .ThenByDescending(s => propertyInfo.GetValue(s))
+                        .ToList();
+            }
+        }
+    }
 }
+
+// Pagination
+mergedList = mergedList
+    .Skip((getStudiesList.PageNumber - 1) * getStudiesList.PageSize)
+    .Take(getStudiesList.PageSize)
+    .ToList();
+
+return mergedList;
