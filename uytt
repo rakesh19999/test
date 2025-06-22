@@ -1,70 +1,148 @@
-var reqCol = getStudiesList.SortColumn?.ToLower();
-var sortOrder = getStudiesList.SortOrder?.ToLower();
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import FailedDicomChecks from './FailedDiconChecks'; // Adjust path if different
+import { FailedCheckswithImageSeries } from '../../interface/QCForm';
 
-if (!string.IsNullOrEmpty(reqCol))
-{
-    var colMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        { "lastupdatedby", "ModifiedBy" },
-        { "lastupdateddate", "ModifiedDatetime" },
-        { "lastpublishedby", "ModifiedBy" },         // we’ll handle conditionally
-        { "lastpublisheddate", "ModifiedDatetime" }, // we’ll handle conditionally
-        { "studyid", "StudyId" },
-        { "sponsorname", "SponsorName" },
-        { "statusname", "StatusName" },
-        // add more if needed
+// Mock data
+const sampleFailedChecks: Record<string, FailedCheckswithImageSeries> = {
+  'series1': {
+    SeriesUID: '1.2.3',
+    DefinedImageSeriesName: 'Series A',
+    failedChecks: [
+      {
+        isSeriesLevelCheck: true,
+        sliceNumber: 5,
+        qcChecksData: {
+          dicomTag: '0010,0010',
+          dicomTagName: 'Patient Name',
+          checkDescription: 'Check if patient name is present',
+          checkCondition: 'Not Empty',
+          expectedValue: 'John Doe',
+          actualValue: 'John D.',
+        },
+      },
+      {
+        isSeriesLevelCheck: false,
+        sliceNumber: 6,
+        qcChecksData: {
+          dicomTag: '0010,0020',
+          dicomTagName: 'Patient ID',
+          checkDescription: 'Check ID format',
+          checkCondition: 'Regex Match',
+          expectedValue: 'PID12345',
+          actualValue: 'PID12345',
+        },
+      },
+      {
+        isSeriesLevelCheck: false,
+        sliceNumber: 6,
+        qcChecksData: {
+          dicomTag: '0010,0020',
+          dicomTagName: 'Patient ID',
+          checkDescription: 'Check ID format',
+          checkCondition: 'Regex Match',
+          expectedValue: 'PID12345',
+          actualValue: 'PID67890',
+        },
+      },
+    ],
+  },
+};
+
+describe('FailedDicomChecks', () => {
+  it('should render nothing when there are no failed checks', () => {
+    const { container } = render(<FailedDicomChecks failedChecks={{}} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('should render the failed checks table with expected rows and columns', () => {
+    render(<FailedDicomChecks failedChecks={sampleFailedChecks} />);
+
+    // Table headers
+    expect(screen.getByText('DICOM Tag')).toBeInTheDocument();
+    expect(screen.getByText('DICOM Tag Name')).toBeInTheDocument();
+    expect(screen.getByText('Check Description')).toBeInTheDocument();
+    expect(screen.getByText('Check Condition')).toBeInTheDocument();
+    expect(screen.getByText('Expected Value')).toBeInTheDocument();
+    expect(screen.getByText('Actual value(s)')).toBeInTheDocument();
+    expect(screen.getByText('slice Number(s)')).toBeInTheDocument();
+    expect(screen.getByText('Image Series')).toBeInTheDocument();
+    expect(screen.getByText('Image Series UID')).toBeInTheDocument();
+
+    // Values from mock
+    expect(screen.getByText('0010,0010')).toBeInTheDocument(); // dicom tag
+    expect(screen.getByText('Patient Name')).toBeInTheDocument();
+    expect(screen.getByText('Check if patient name is present')).toBeInTheDocument();
+    expect(screen.getByText('Not Empty')).toBeInTheDocument();
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('John D.')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('Series A')).toBeInTheDocument();
+    expect(screen.getByText('1.2.3')).toBeInTheDocument();
+  });
+
+  it('should truncate long strings with tooltip', () => {
+    const longText = 'This is a very long text that exceeds fifty characters and should be truncated.';
+    const customData = {
+      'series2': {
+        SeriesUID: '9.8.7',
+        DefinedImageSeriesName: 'Series B',
+        failedChecks: [
+          {
+            isSeriesLevelCheck: true,
+            sliceNumber: 10,
+            qcChecksData: {
+              dicomTag: '0020,000D',
+              dicomTagName: 'Study Instance UID',
+              checkDescription: longText,
+              checkCondition: 'Length',
+              expectedValue: 'Short',
+              actualValue: longText,
+            },
+          },
+        ],
+      },
     };
 
-    if (colMap.TryGetValue(reqCol, out var actualProperty))
-    {
-        if (reqCol == "lastpublishedby")
-        {
-            mergedList = sortOrder == "asc"
-                ? mergedList
-                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
-                    .ThenBy(s => s.StatusName == "Published" ? s.ModifiedBy : null)
-                    .ToList()
-                : mergedList
-                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedBy != null ? 0 : 1)
-                    .ThenByDescending(s => s.StatusName == "Published" ? s.ModifiedBy : null)
-                    .ToList();
-        }
-        else if (reqCol == "lastpublisheddate")
-        {
-            mergedList = sortOrder == "asc"
-                ? mergedList
-                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedDatetime != null ? 0 : 1)
-                    .ThenBy(s => s.StatusName == "Published" ? s.ModifiedDatetime : null)
-                    .ToList()
-                : mergedList
-                    .OrderBy(s => s.StatusName == "Published" && s.ModifiedDatetime != null ? 0 : 1)
-                    .ThenByDescending(s => s.StatusName == "Published" ? s.ModifiedDatetime : null)
-                    .ToList();
-        }
-        else
-        {
-            // General case — reflect and sort with nulls last
-            var propertyInfo = typeof(StudyDto).GetProperty(actualProperty);
-            if (propertyInfo != null)
-            {
-                mergedList = sortOrder == "asc"
-                    ? mergedList
-                        .OrderBy(s => propertyInfo.GetValue(s) == null ? 1 : 0)
-                        .ThenBy(s => propertyInfo.GetValue(s))
-                        .ToList()
-                    : mergedList
-                        .OrderBy(s => propertyInfo.GetValue(s) == null ? 1 : 0)
-                        .ThenByDescending(s => propertyInfo.GetValue(s))
-                        .ToList();
-            }
-        }
-    }
-}
+    render(<FailedDicomChecks failedChecks={customData} />);
+    expect(screen.getByText(/This is a very long text that exceeds fif.../)).toBeInTheDocument();
+  });
 
-// Pagination
-mergedList = mergedList
-    .Skip((getStudiesList.PageNumber - 1) * getStudiesList.PageSize)
-    .Take(getStudiesList.PageSize)
-    .ToList();
+  it('should handle repeated actual values and display only unique ones', () => {
+    const customData = {
+      'series3': {
+        SeriesUID: '4.3.2',
+        DefinedImageSeriesName: 'Series C',
+        failedChecks: [
+          {
+            isSeriesLevelCheck: false,
+            sliceNumber: 7,
+            qcChecksData: {
+              dicomTag: '0020,000E',
+              dicomTagName: 'Series Instance UID',
+              checkDescription: 'Duplicate value check',
+              checkCondition: 'Equality',
+              expectedValue: 'ABC',
+              actualValue: 'Duplicate',
+            },
+          },
+          {
+            isSeriesLevelCheck: false,
+            sliceNumber: 8,
+            qcChecksData: {
+              dicomTag: '0020,000E',
+              dicomTagName: 'Series Instance UID',
+              checkDescription: 'Duplicate value check',
+              checkCondition: 'Equality',
+              expectedValue: 'ABC',
+              actualValue: 'Duplicate',
+            },
+          },
+        ],
+      },
+    };
 
-return mergedList;
+    render(<FailedDicomChecks failedChecks={customData} />);
+    expect(screen.getByText('Duplicate')).toBeInTheDocument(); // only once
+  });
+});
